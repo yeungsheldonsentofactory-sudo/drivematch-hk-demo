@@ -4,12 +4,13 @@ import {
   Fuel, Heart, Menu, Search, SlidersHorizontal, UploadCloud, X,
 } from 'lucide-react'
 
-const carPhoto = '/assets/audi-q5-studio.png'
+const asset = (name) => `${import.meta.env.BASE_URL}assets/${name}`
+const carPhoto = asset('audi-q5-studio.png')
 
 const seedCars = [
-  { id: 1, brand: 'Toyota', name: 'Alphard 2.5 SC', year: 2019, mileage: 48000, price: 538000, type: 'MPV', seats: '7座位', image: '/assets/toyota-alphard-studio.png' },
+  { id: 1, brand: 'Toyota', name: 'Alphard 2.5 SC', year: 2019, mileage: 48000, price: 538000, type: 'MPV', seats: '7座位', image: asset('toyota-alphard-studio.png') },
   { id: 2, brand: 'Audi', name: 'Q5 40 TFSI Quattro', year: 2021, mileage: 36000, price: 298000, type: 'SUV', seats: '5座位', image: carPhoto, selected: true },
-  { id: 3, brand: 'BMW', name: '320i Sport', year: 2018, mileage: 62000, price: 178000, type: '房車', seats: '5座位', image: '/assets/bmw-320i-studio.png' },
+  { id: 3, brand: 'BMW', name: '320i Sport', year: 2018, mileage: 62000, price: 178000, type: '房車', seats: '5座位', image: asset('bmw-320i-studio.png') },
 ]
 
 const dealers = [
