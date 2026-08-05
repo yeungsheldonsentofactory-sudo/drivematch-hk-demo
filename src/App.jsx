@@ -1,67 +1,104 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowRight, CalendarDays, Camera, Check, ChevronDown, ChevronRight, CircleDollarSign,
-  Fuel, Heart, Menu, Search, SlidersHorizontal, UploadCloud, X,
+  ArrowLeft, ArrowUpRight, Bell, CarFront, Check, ChevronDown, ClipboardList,
+  FileText, Heart, Menu, MessageCircle, Phone, Plus, Search, Send, ShieldCheck,
+  SlidersHorizontal, UploadCloud, UserRound, Users, X,
 } from 'lucide-react'
 
-const asset = (name) => `${import.meta.env.BASE_URL}assets/${name}`
-const carPhoto = asset('audi-q5-studio.png')
+const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
+const asset = (name) => `${basePath}assets/${name}`
 
-const seedCars = [
-  { id: 1, brand: 'Toyota', name: 'Alphard 2.5 SC', year: 2019, mileage: 48000, price: 538000, type: 'MPV', seats: '7座位', image: asset('toyota-alphard-studio.png') },
-  { id: 2, brand: 'Audi', name: 'Q5 40 TFSI Quattro', year: 2021, mileage: 36000, price: 298000, type: 'SUV', seats: '5座位', image: carPhoto, selected: true },
-  { id: 3, brand: 'BMW', name: '320i Sport', year: 2018, mileage: 62000, price: 178000, type: '房車', seats: '5座位', image: asset('bmw-320i-studio.png') },
+const brands = [
+  ['F', 'Ferrari'], ['L', 'Lamborghini'], ['M', 'McLaren'], ['P', 'Porsche'],
+  ['R', 'Rolls‑Royce'], ['B', 'BMW'], ['A', 'Audi'], ['T', 'Toyota'], ['L', 'Lexus'], ['M', 'Mercedes‑Benz'],
 ]
 
-const dealers = [
-  ['信誠車行', '九龍灣', 'HK$298,000'],
-  ['駿達汽車', '慈雲山', 'HK$308,000'],
-  ['永興車行', '元朗', 'HK$318,000'],
+const cars = [
+  { id: 1, brand: 'Ferrari', model: 'SF90 Stradale', type: '超級跑車', year: 2022, price: 5980000, mileage: 8200, owners: 1, added: 6, highlight: '4.0L V8 混能 · 780 匹馬力', image: asset('supercar-sf90.png') },
+  { id: 2, brand: 'Porsche', model: '911 Carrera S', type: '跑車', year: 2021, price: 1598000, mileage: 12500, owners: 2, added: 11, highlight: '3.0L 雙渦輪 · Sport Chrono', image: asset('bmw-320i-studio.png') },
+  { id: 3, brand: 'Tesla', model: 'Model S Plaid', type: '電動車', year: 2023, price: 928000, mileage: 9400, owners: 1, added: 2, highlight: '三電馬達 · 0–100km/h 2.1s', image: asset('ev-sedan.png') },
+  { id: 4, brand: 'Toyota', model: 'Alphard 2.5 SC', type: '七人商務車', year: 2020, price: 898000, mileage: 37500, owners: 1, added: 4, highlight: '7 座豪華車廂 · 雙天窗', image: asset('toyota-alphard-studio.png') },
+  { id: 5, brand: 'Mercedes‑Benz', model: 'E 300 AMG Line', type: '高級家庭車', year: 2021, price: 468000, mileage: 28500, owners: 1, added: 8, highlight: '2.0L 渦輪 · 全景天幕', image: asset('audi-q5-studio.png') },
+  { id: 6, brand: 'Lexus', model: 'LS 500h Executive', type: '高級日本車', year: 2020, price: 568000, mileage: 41200, owners: 2, added: 15, highlight: '3.5L Hybrid · Mark Levinson', image: asset('bmw-320i-studio.png') },
 ]
 
-function FilterTitle({ children }) {
-  return <div className="filter-title"><span>{children}</span><ChevronDown size={15} /></div>
+const suggestions = [
+  { label: 'Ferrari SF90 Stradale', brand: 'Ferrari', model: 'SF90 Stradale', image: asset('supercar-sf90.png') },
+  { label: 'Ferrari SF90 Spider', brand: 'Ferrari', model: 'SF90 Spider', image: asset('supercar-sf90.png') },
+  { label: 'Porsche 911 Carrera S', brand: 'Porsche', model: '911 Carrera S', image: asset('bmw-320i-studio.png') },
+]
+
+const submissionSeed = [
+  { id: 'SUB-20260805-481', name: 'Mercedes‑Benz S 500 L AMG Line', year: 2021, mileage: '28,500 公里', owners: 1, color: '黑色', import: '平行進口', options: 'AMG Line Package、夜視輔助系統、Burmeister® 環迴立體聲、全景天窗', history: '沒有事故或維修紀錄；保養定期，外觀及內籠良好', image: asset('audi-q5-studio.png'), status: '待審閱' },
+  { id: 'SUB-20260805-482', name: 'BMW 740Li M Sport', year: 2020, mileage: '31,000 公里', owners: 2, color: '白色', import: '原廠行貨', options: 'Executive Lounge、360 鏡頭', history: '定期保養', image: asset('bmw-320i-studio.png'), status: '待審閱' },
+  { id: 'SUB-20260805-483', name: 'Tesla Model 3 Performance', year: 2022, mileage: '18,700 公里', owners: 1, color: '珍珠白', import: '原廠行貨', options: 'Premium Connectivity', history: '沒有事故', image: asset('ev-sedan.png'), status: '待審閱' },
+]
+
+const price = (value) => `HK$${value.toLocaleString('en-HK')}`
+
+function Header({ screen, onScreen, selectedBrand, setSelectedBrand }) {
+  return <header className="apex-header">
+    <button className="apex-brand" onClick={() => onScreen('buyer')} aria-label="返回首頁">Apex <span>Motor Gallery</span></button>
+    {screen === 'buyer' && <div className="brand-rail" aria-label="品牌快速篩選">{brands.map(([mark, name]) => <button className={`brand-mark ${selectedBrand === name ? 'selected' : ''}`} key={name} title={name} onClick={() => setSelectedBrand(selectedBrand === name ? '' : name)}><b>{mark}</b><small>{name.replace('Mercedes‑Benz', 'Mercedes')}</small></button>)}</div>}
+    <div className="header-actions"><button className={`header-cta ${screen === 'buyer' ? 'soft-active' : ''}`} onClick={() => onScreen('buyer')}><UserRound size={16}/>我是買家</button><button className={`header-cta sell ${screen === 'seller' ? 'sell-active' : ''}`} onClick={() => onScreen('seller')}><CarFront size={16}/>我是賣家</button></div>
+  </header>
 }
 
-function Nav() {
-  return <header className="nav"><a className="brand" href="#top">Drive<span>Match</span></a><nav><a href="#cars">瀏覽車盤</a><a href="#sell">賣車</a><a href="#saved">我的收藏</a></nav><button className="account"><span className="avatar">何</span>登入 / 註冊 <ChevronDown size={15} /></button></header>
+function BuyerHome({ onScreen }) {
+  const [query, setQuery] = useState('')
+  const [selectedBrand, setSelectedBrand] = useState('')
+  const [sort, setSort] = useState('random')
+  const [saved, setSaved] = useState([])
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chat, setChat] = useState(() => JSON.parse(localStorage.getItem('apex-chat') || '[{"from":"agent","body":"你好，有咩車款想了解？"}]'))
+  const [message, setMessage] = useState('')
+  const searchMatches = query.trim().length > 1 ? suggestions.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())) : []
+  const inventory = useMemo(() => {
+    const found = cars.filter((car) => (!selectedBrand || car.brand === selectedBrand) && (!query || `${car.brand} ${car.model} ${car.type}`.toLowerCase().includes(query.toLowerCase())))
+    const result = [...found]
+    const rules = { low: (a, b) => a.price - b.price, high: (a, b) => b.price - a.price, new: (a, b) => a.added - b.added, old: (a, b) => b.added - a.added, year: (a, b) => b.year - a.year, mileage: (a, b) => a.mileage - b.mileage, owners: (a, b) => a.owners - b.owners }
+    return sort === 'random' ? result : result.sort(rules[sort])
+  }, [query, selectedBrand, sort])
+  const send = (event) => { event.preventDefault(); if (!message.trim()) return; const next = [...chat, { from: 'buyer', body: message.trim() }]; setChat(next); localStorage.setItem('apex-chat', JSON.stringify(next)); setMessage(''); window.setTimeout(() => { const reply = [...next, { from: 'agent', body: '已收到，你的專屬顧問會盡快回覆。' }]; setChat(reply); localStorage.setItem('apex-chat', JSON.stringify(reply)) }, 450) }
+  const selectSuggestion = (item) => { setSelectedBrand(item.brand); setQuery(item.model) }
+  return <div className="site-shell"><Header screen="buyer" onScreen={onScreen} selectedBrand={selectedBrand} setSelectedBrand={setSelectedBrand}/><main className="buyer-main">
+    <section className="search-stage"><h1>每架現貨，都值得親身細看。</h1><p>從超級跑車到七人商務車，精選現貨即時更新。</p><div className="intelligent-search"><Search size={22}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋車款、品牌或型號，例如 Ferrari SF" aria-label="智能搜尋車款"/><button aria-label="清除搜尋" onClick={() => setQuery('')}>{query && <X size={18}/>}</button></div>{searchMatches.length > 0 && <div className="suggestion-menu">{searchMatches.map((item) => <button key={item.label} onClick={() => selectSuggestion(item)}><img src={item.image} alt=""/><span>{item.label}</span><ArrowUpRight size={17}/></button>)}</div>}</section>
+    <section className="inventory-section"><div className="inventory-toolbar"><div><span className="eyeline">現貨車盤</span><h2>{selectedBrand ? `${selectedBrand} 精選現貨` : '今日精選現貨'}</h2></div><div className="toolbar-controls"><button className="filter-button"><SlidersHorizontal size={17}/>篩選條件</button><label className="sort-select">排序：<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="random">隨機顯示</option><option value="low">價錢：低至高</option><option value="high">價錢：高至低</option><option value="new">上架日期：最新</option><option value="old">上架日期：最舊</option><option value="year">出廠年份</option><option value="mileage">行駛里數</option><option value="owners">車主擁有數</option></select><ChevronDown size={15}/></label></div></div><div className="inventory-grid">{inventory.map((car) => <article className="vehicle-card" key={car.id}><div className="vehicle-image"><img src={car.image} alt={`${car.brand} ${car.model}`}/><button className={saved.includes(car.id) ? 'saved' : ''} onClick={() => setSaved((current) => current.includes(car.id) ? current.filter((id) => id !== car.id) : [...current, car.id])}><Heart size={21} fill={saved.includes(car.id) ? 'currentColor' : 'none'}/></button><span>{car.type}</span></div><div className="vehicle-copy"><div className="vehicle-line"><h3>{car.brand} {car.model}</h3><strong>{price(car.price)}</strong></div><p>{car.year} ・ {car.mileage.toLocaleString()} 公里 ・ {car.owners} 手</p><div className="vehicle-highlight">{car.highlight}</div></div></article>)}</div>{inventory.length === 0 && <div className="empty-state"><Search size={28}/><h3>未找到相關車盤</h3><button onClick={() => { setSelectedBrand(''); setQuery('') }}>顯示所有現貨</button></div>}</section>
+    <section className="trust-band"><div className="years">30<small>YEARS</small></div><div><h2>汽車業界 30 年經驗</h2><p>合作夥伴及團隊成員曾於香港 Ferrari、Lamborghini、McLaren 及 Porsche 等品牌擔任管理職位，並與品牌香港持有人緊密合作。</p></div><ShieldCheck size={34}/></section>
+  </main><ChatWidget open={chatOpen} setOpen={setChatOpen} chat={chat} message={message} setMessage={setMessage} send={send}/></div>
 }
 
-function SearchHero({ query, setQuery, onSearch }) {
-  return <section className="hero" id="top"><div className="hero-inner"><h1>找到最抵的下一架車</h1><p>比較全港車行報價、睇清規格、里數同車況，幫你慳更多。</p><form className="searchbar" onSubmit={(e) => { e.preventDefault(); onSearch() }}><label className="keyword"><Search size={23}/><input aria-label="搜尋車款" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="輸入車款、品牌或型號，例如：Toyota Alphard" /></label><div className="quick-field"><Camera size={21}/><span>車身類型<em>不限</em></span><ChevronDown size={17}/></div><div className="quick-field"><CircleDollarSign size={21}/><span>價格上限<em>不限</em></span><ChevronDown size={17}/></div><div className="quick-field"><CalendarDays size={21}/><span>年份<em>不限</em></span><ChevronDown size={17}/></div><button className="primary search-submit">搜尋車盤</button></form></div></section>
+function ChatWidget({ open, setOpen, chat, message, setMessage, send }) {
+  return <div className="chat-wrap">{open && <section className="chat-panel"><header><div><span className="online-dot"/>線上客服<small>通常 5 分鐘內回覆</small></div><button onClick={() => setOpen(false)}><X size={18}/></button></header><div className="chat-log">{chat.map((item, index) => <p key={`${item.body}-${index}`} className={item.from}>{item.body}</p>)}</div><form onSubmit={send}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="輸入訊息…"/><button aria-label="發送訊息"><Send size={18}/></button></form></section>}<button className="chat-launcher" onClick={() => setOpen(!open)}><span className="online-dot"/><MessageCircle size={23}/><b>線上客服</b></button></div>
 }
 
-function Filters({ brands, toggleBrand }) {
-  return <aside className="filters"><div className="filter-heading"><strong>篩選條件</strong><button>清除全部</button></div><div className="filter-block"><FilterTitle>品牌</FilterTitle><label className="brand-search"><Search size={14}/><input placeholder="搜尋品牌" /></label><label className="checkrow"><input type="checkbox" checked={brands.length === 0} readOnly /><span>所有品牌</span></label>{['Toyota (1,256)', 'Honda (842)', 'Mercedes-Benz (623)', 'BMW (611)', 'Audi (512)'].map((b) => { const name=b.split(' ')[0]; return <label className="checkrow" key={b}><input type="checkbox" checked={brands.includes(name)} onChange={() => toggleBrand(name)} /><span>{b}</span></label>})}<button className="more">顯示更多</button></div><div className="filter-block"><FilterTitle>價格範圍 (HKD)</FilterTitle><div className="range-line"><i/><i/></div><div className="price-range"><span>$50,000</span><span>$3,000,000+</span></div></div><div className="filter-block"><FilterTitle>年份</FilterTitle><div className="select-pair"><button>2010 <ChevronDown size={14}/></button><span>至</span><button>2024 <ChevronDown size={14}/></button></div></div><div className="filter-block"><FilterTitle>里數 (公里)</FilterTitle><div className="range-line"><i/><i/></div><div className="price-range"><span>0 公里</span><span>200,000+ 公里</span></div></div></aside>
-}
-
-function ListingRow({ car, active, onSelect, saved, onSave }) {
-  return <article className={`listing ${active ? 'listing-active' : ''}`} onClick={() => onSelect(car.id)}><div className="listing-photo"><img src={car.image} alt={`${car.brand} ${car.name}`}/></div><div className="listing-info"><h3>{car.brand} {car.name}</h3><p>{car.year} ・ {car.mileage.toLocaleString()} 公里 ・ 自動波 ・ {car.seats}</p></div><div className="listing-price"><small>3 間車行報價</small><strong>HK${car.price.toLocaleString()} - {(car.price + 20000).toLocaleString()}</strong></div><button className={`row-save ${saved ? 'is-saved':''}`} onClick={(e)=>{ e.stopPropagation(); onSave(car.id) }} aria-label="收藏"><Heart size={19} fill={saved ? 'currentColor' : 'none'} /></button><ChevronRight className="row-chevron" size={21}/></article>
-}
-
-function DetailPanel({ onBook, saved, onSave }) {
-  const details = [['首次登記年份', '2021'], ['行車里數', '36,000 公里'], ['引擎', '1,984c.c. 直四 Turbo'], ['波箱', '7速自動波 S tronic'], ['座位', '5 座位'], ['燃料種類', '汽油'], ['車身類型', 'SUV'], ['驅動方式', '四輪驅動 (Quattro)']]
-  return <section className="detail"><div className="detail-car"><img src={carPhoto} alt="Audi Q5 40 TFSI Quattro"/><button className={`save-link ${saved ? 'is-saved':''}`} onClick={onSave}><Heart size={18} fill={saved ? 'currentColor':'none'}/> {saved ? '已加入收藏' : '加入收藏'}</button></div><div className="specs"><h2>Audi Q5 40 TFSI Quattro</h2><p className="subline">2021 ・ 36,000 公里</p><dl>{details.map(([term, desc]) => <div key={term}><dt>{term}</dt><dd>{desc}</dd></div>)}</dl></div><div className="quote-card"><h3>3 間車行報價</h3>{dealers.map(([name, area, price])=><div className="dealer" key={name}><span><b>{name}</b><small>{area}</small></span><strong>{price}</strong><button>聯絡</button></div>)}<button className="more-dealers">查看全部車行 (3)</button></div><div className="detail-actions"><button className="outline" onClick={() => alert('已開啟完整車輛資料。')}>查看詳細資料</button><button className="primary" onClick={onBook}>預約睇車 <ArrowRight size={18}/></button></div></section>
-}
-
-function Uploader({ files, setFiles }) {
+function SellerPage({ onScreen }) {
   const fileRef = useRef(null)
-  const add = (list) => { const incoming = Array.from(list || []).filter((f) => f.type.startsWith('image/')).slice(0, 6 - files.length).map((f)=>({name:f.name,url:URL.createObjectURL(f)})); setFiles([...files, ...incoming]) }
-  return <aside className="uploader" id="sell"><h2>賣車上傳相片</h2><div className="dropzone" onClick={()=>fileRef.current?.click()} onDragOver={(e)=>e.preventDefault()} onDrop={(e)=>{e.preventDefault();add(e.dataTransfer.files)}}><UploadCloud size={46}/><strong>將相片拖放到此處</strong><span>或</span><button type="button" className="primary">選擇相片</button><small>支援 JPG、PNG，最多 10 張，每張不超過 10MB</small><input ref={fileRef} onChange={(e)=>add(e.target.files)} accept="image/*" multiple type="file" /></div>{files.length > 0 ? <><div className="thumbs">{files.map((file, i)=><div className="thumb" key={file.url}><img src={file.url} alt={file.name}/><button onClick={()=>setFiles(files.filter((_,n)=>n!==i))}><X size={13}/></button></div>)}</div><p className="upload-count">已選擇 {files.length} 張相片</p></> : <p className="empty-upload">上傳相片後，買家更容易找到你的車。</p>}</aside>
+  const [files, setFiles] = useState([])
+  const [submitted, setSubmitted] = useState(false)
+  const addFiles = (list) => setFiles((current) => [...current, ...Array.from(list || []).filter((file) => file.type.startsWith('image/')).slice(0, 8 - current.length).map((file) => ({ name: file.name, url: URL.createObjectURL(file) }))])
+  if (submitted) return <div className="site-shell"><Header screen="seller" onScreen={onScreen}/><main className="seller-layout confirmation"><Check size={36}/><h1>已收到你的車輛資料</h1><p>車盤不會直接公開；我們的團隊會先審閱，再以電話或線上客服聯絡你。</p><button className="dark-button" onClick={() => onScreen('buyer')}>返回現貨車盤</button></main></div>
+  return <div className="site-shell"><Header screen="seller" onScreen={onScreen}/><main className="seller-layout"><button className="back-link" onClick={() => onScreen('buyer')}><ArrowLeft size={17}/>返回買家瀏覽</button><div className="seller-heading"><span className="eyeline">賣家專區</span><h1>讓專業團隊，替你的愛車找對下一位車主。</h1><p>提交資料後由內部審閱，不會直接顯示在網站。</p></div><div className="seller-choice"><section><FileText size={26}/><h2>提交車輛資訊</h2><p>填寫基本資料、車況與相片，我們會主動評估及聯絡。</p></section><section><MessageCircle size={26}/><h2>線上客服查詢賣車</h2><p>即時與顧問討論估值、交車及寄賣安排。</p><button className="outline-button">開啟線上客服</button></section></div><form className="seller-form" onSubmit={(event) => { event.preventDefault(); setSubmitted(true) }}><div className="form-title"><h2>車輛資料</h2><p>標示 * 的欄位為必填。</p></div><div className="photo-drop" onClick={() => fileRef.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files) }}><UploadCloud size={34}/><strong>上載車輛相片</strong><span>拖放相片到這裡，或按此選擇檔案</span><small>JPG、PNG；最多 8 張</small><input ref={fileRef} type="file" accept="image/*" multiple onChange={(event) => addFiles(event.target.files)}/></div>{files.length > 0 && <div className="seller-thumbs">{files.map((file, index) => <div key={file.url}><img src={file.url} alt={file.name}/><button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={13}/></button></div>)}</div>}<div className="form-grid"><Field label="出廠年份 *" placeholder="例如 2021"/><Field label="香港首次登記年份" placeholder="例如 2021"/><SelectField label="水貨 / 行貨 *" options={['請選擇', '水貨 / 平行進口', '行貨']}/><Field label="車主數目 *" placeholder="例如 1"/><Field label="總行駛里程數 *" placeholder="例如 28,500 公里"/><Field label="車輛顏色" placeholder="例如 黑色"/><TextField label="車輛選配" placeholder="例如 全景天窗、升級音響、駕駛輔助套件"/><TextField label="事故及維修紀錄" placeholder="請如實填寫事故、維修或保養紀錄"/></div><button className="dark-button submit-sale">提交資料供內部審閱 <ArrowUpRight size={17}/></button></form></main></div>
+}
+
+function Field({ label, placeholder }) { return <label className="form-field"><span>{label}</span><input placeholder={placeholder}/></label> }
+function SelectField({ label, options }) { return <label className="form-field"><span>{label}</span><select>{options.map((option) => <option key={option}>{option}</option>)}</select></label> }
+function TextField({ label, placeholder }) { return <label className="form-field full"><span>{label}</span><textarea placeholder={placeholder}/></label> }
+
+function AdminPanel() {
+  const [selected, setSelected] = useState(submissionSeed[0])
+  const [notes, setNotes] = useState(['需要留牌', '無牌費', '進口車'])
+  const [action, setAction] = useState('')
+  const toggleNote = (note) => setNotes((current) => current.includes(note) ? current.filter((item) => item !== note) : [...current, note])
+  return <div className="admin-shell"><aside className="admin-sidebar"><div className="admin-logo">APEX<small>MOTOR GALLERY · HONG KONG</small></div><nav><button className="active"><CarFront size={20}/>車盤審閱 <b>12</b></button><button><Plus size={20}/>新增車盤</button><button><ClipboardList size={20}/>已上架</button><button><MessageCircle size={20}/>客戶訊息 <b>2</b></button></nav><span className="admin-return">內部系統示範 · #admin</span></aside><main className="admin-main"><header className="admin-top"><div><Menu size={23}/><h1>車盤審閱及上架</h1></div><div><Bell size={21}/><span>共享收件箱</span><UserRound size={22}/><b>陳志偉</b><ChevronDown size={15}/></div></header><div className="admin-workspace"><section className="submission-list"><div className="review-tabs"><button className="tab-active">待審閱 <b>12</b></button><button>已聯絡 <b>3</b></button><button>已拒絕 <b>4</b></button><button>全部 <b>19</b></button></div><div className="list-tools"><button><SlidersHorizontal size={16}/>篩選</button><button>最新提交 <ChevronDown size={15}/></button></div><div className="review-table">{submissionSeed.map((item) => <button className={`review-row ${selected.id === item.id ? 'selected' : ''}`} key={item.id} onClick={() => setSelected(item)}><span className="radio"/><img src={item.image} alt=""/><span><b>{item.name}</b><small>{item.id} · {item.year}</small></span><span>{item.mileage}</span><span>{item.owners} 手</span><strong>{item.status}</strong></button>)}</div></section><section className="review-detail"><header><h2>審閱詳情</h2><button><X size={19}/></button></header><div className="submission-id"><span>提交編號<b>{selected.id}</b></span><span>提交時間<b>今天 14:28</b></span></div><h3>車輛資訊</h3><div className="review-photos"><img src={selected.image} alt={selected.name}/><img src={selected.image} alt="車尾"/><img src={selected.image} alt="車廂"/></div><div className="detail-specs"><div><span>車型 / 型號</span><b>{selected.name}</b></div><div><span>年份</span><b>{selected.year}</b></div><div><span>首次登記（香港）</span><b>2021 年 03 月</b></div><div><span>平行 / 進口</span><b>{selected.import}</b></div><div><span>車主數目</span><b>{selected.owners}</b></div><div><span>里數</span><b>{selected.mileage}</b></div><div><span>車身顏色</span><b>{selected.color}</b></div><div><span>車輛選配</span><b>{selected.options}</b></div><div><span>事故 / 維修紀錄</span><b>{selected.history}</b></div></div><div className="internal-tags"><h3>內部備註（可多選）</h3>{['需要留牌', '無牌費', '事故車輛', '進口車', '寄賣車', '公司自購車'].map((note) => <label key={note}><input type="checkbox" checked={notes.includes(note)} onChange={() => toggleNote(note)}/>{note}</label>)}</div><div className="review-actions"><button onClick={() => setAction('已拒絕此車盤。')}>拒絕</button><button onClick={() => setAction('已開啟 WhatsApp 聯絡流程。')}><Phone size={17}/>WhatsApp 聯絡</button><button className="approve" onClick={() => setAction('已轉入上架流程，等待專業照片及最終覆核。')}>採用並上架</button></div>{action && <p className="admin-notice"><Check size={16}/>{action}</p>}</section><aside className="team-chat"><header><h2>內部討論</h2><span>3 位同事參與</span></header>{[['陳志偉', '這部 S 500 外觀內籠不錯，里數合理，有平行進口文件。'], ['張嘉豪', '同意，可以查一下維修記錄同保養單。'], ['李思敏', '我會聯絡客人了解留牌同估價期望。']].map(([name, text]) => <article key={name}><span>{name.slice(0, 1)}</span><p><b>{name}</b>{text}</p><time>14:35</time></article>)}<form><input placeholder="輸入訊息…"/><button><Send size={18}/></button></form></aside></div></main></div>
 }
 
 function App() {
-  const [query, setQuery] = useState('')
-  const [brands, setBrands] = useState([])
-  const [selected, setSelected] = useState(2)
-  const [saved, setSaved] = useState([])
-  const [files, setFiles] = useState([])
-  const [notice, setNotice] = useState('')
-  const filtered = useMemo(()=>seedCars.filter((car)=>{ const text=`${car.brand} ${car.name}`.toLowerCase(); return (!query || text.includes(query.toLowerCase())) && (!brands.length || brands.includes(car.brand)) }),[query,brands])
-  const toggleBrand=(brand)=>setBrands((current)=>current.includes(brand)?current.filter((b)=>b!==brand):[...current,brand])
-  const toggleSave=(id)=>setSaved((current)=>current.includes(id)?current.filter((item)=>item!==id):[...current,id])
-  const book=()=>{setNotice('預約申請已送出，車行會盡快與你聯絡。'); window.setTimeout(()=>setNotice(''), 4000)}
-  return <><Nav/><SearchHero query={query} setQuery={setQuery} onSearch={()=>document.querySelector('#cars')?.scrollIntoView({behavior:'smooth'})}/><main id="cars"><Filters brands={brands} toggleBrand={toggleBrand}/><div className="inventory"><div className="inventory-top"><span>找到 <b>{filtered.length ? 512 : 0}</b> 個車盤</span><div><button className="sort">排序：推薦 <ChevronDown size={16}/></button><button className="view-toggle active"><Menu size={20}/></button><button className="view-toggle"><SlidersHorizontal size={18}/></button></div></div><div className="listing-rail">{filtered.map((car)=><ListingRow key={car.id} car={car} active={selected===car.id} onSelect={setSelected} saved={saved.includes(car.id)} onSave={toggleSave}/>)}</div>{selected === 2 ? <DetailPanel onBook={book} saved={saved.includes(2)} onSave={()=>toggleSave(2)}/> : <div className="selection-empty"><Fuel size={30}/><h2>{seedCars.find(c=>c.id===selected)?.brand} {seedCars.find(c=>c.id===selected)?.name}</h2><p>選取 Audi Q5 以查看完整規格及三間車行報價。</p></div>}</div><Uploader files={files} setFiles={setFiles}/></main>{notice && <div className="toast"><Check size={18}/>{notice}</div>}</>
+  const [screen, setScreen] = useState(() => window.location.hash === '#admin' ? 'admin' : 'buyer')
+  useEffect(() => { const sync = () => setScreen(window.location.hash === '#admin' ? 'admin' : 'buyer'); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
+  const navigate = (next) => { if (next === 'admin') window.location.hash = 'admin'; else { window.history.replaceState(null, '', window.location.pathname); setScreen(next) } }
+  if (screen === 'admin') return <AdminPanel/>
+  return screen === 'seller' ? <SellerPage onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
 }
 
 export default App
