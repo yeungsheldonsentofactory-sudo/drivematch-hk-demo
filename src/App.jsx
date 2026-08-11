@@ -11,6 +11,16 @@ import { useCustomerChat } from './useCustomerChat'
 const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
 const asset = (name) => `${basePath}assets/${name}`
 const fallbackImages = { Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'), Toyota: asset('toyota-alphard-studio.png'), 'Mercedes-Benz': asset('mercedes-e300-studio-v2.png'), 'Mercedes‑Benz': asset('mercedes-e300-studio-v2.png'), Lexus: asset('lexus-ls500h-studio-v2.png') }
+const vehiclePhotoLabels = ['車頭', '車尾', '車身左側', '車身右側', '車內籠']
+const vehicleImageUrl = (path) => path?.startsWith('http') ? path : supabase.storage.from('vehicle-media').getPublicUrl(path || '').data.publicUrl
+const galleryForVehicle = (hero, images = []) => {
+  const uploaded = [...images]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((image, index) => ({ url: vehicleImageUrl(image.storage_path), alt: image.alt_text || vehiclePhotoLabels[index] }))
+    .filter((image) => Boolean(image.url))
+  const filler = Array.from({ length: Math.max(0, 5 - uploaded.length) }, (_, index) => ({ url: hero, alt: vehiclePhotoLabels[uploaded.length + index] }))
+  return [...uploaded, ...filler].slice(0, 5)
+}
 
 const cars = [
   { id: 1, brand: 'Ferrari', model: 'SF90 Stradale', type: '超級跑車', year: 2022, price: 5980000, mileage: 8200, owners: 1, added: 6, highlight: '4.0L V8 混能 · 780 匹馬力', image: asset('supercar-sf90.png') },
@@ -65,7 +75,7 @@ function BuyerHome({ onScreen }) {
     const rules = { low: (a, b) => a.price - b.price, high: (a, b) => b.price - a.price, new: (a, b) => a.added - b.added, old: (a, b) => b.added - a.added, year: (a, b) => b.year - a.year, mileage: (a, b) => a.mileage - b.mileage, owners: (a, b) => a.owners - b.owners }
     return sort === 'random' ? result : result.sort(rules[sort])
   }, [liveCars, query, selectedBrand, selectedTypes, sort])
-  useEffect(() => { let active = true; supabase.from('vehicles').select('*').eq('status', 'published').order('published_at', { ascending: false }).then(({ data, error }) => { if (!active || error) return; setLiveCars((data || []).map((car) => ({ id: car.id, brand: car.brand, model: car.model, type: car.vehicle_type, year: car.year, price: car.price_hkd, mileage: car.mileage_km, owners: car.owner_count, added: 0, highlight: car.highlight || '已由 DriveMatch 團隊核實', image: car.hero_image_url || fallbackImages[car.brand] || asset('ev-sedan.png') }))) }); return () => { active = false } }, [])
+  useEffect(() => { let active = true; supabase.from('vehicles').select('*, vehicle_images(id, storage_path, alt_text, sort_order)').eq('status', 'published').order('published_at', { ascending: false }).then(({ data, error }) => { if (!active || error) return; setLiveCars((data || []).map((car) => { const image = car.hero_image_url || fallbackImages[car.brand] || asset('ev-sedan.png'); return { id: car.id, brand: car.brand, model: car.model, type: car.vehicle_type, year: car.year, price: car.price_hkd, mileage: car.mileage_km, owners: car.owner_count, added: 0, highlight: car.highlight || '已由 DriveMatch 團隊核實', image, gallery: galleryForVehicle(image, car.vehicle_images) } })) }); return () => { active = false } }, [])
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === 'Escape') { setActiveCar(null); setFilterOpen(false) } }
     window.addEventListener('keydown', closeOnEscape)
@@ -86,8 +96,12 @@ function BuyerHome({ onScreen }) {
 }
 
 function VehicleDetailDialog({ car, onClose, onChat }) {
+  const [selectedPhoto, setSelectedPhoto] = useState(0)
+  useEffect(() => { setSelectedPhoto(0) }, [car?.id])
   if (!car) return null
-  return <div className="vehicle-dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="vehicle-dialog" role="dialog" aria-modal="true" aria-labelledby="vehicle-dialog-title" onMouseDown={(event) => event.stopPropagation()}><button className="dialog-close" onClick={onClose} aria-label="關閉車輛詳情"><X size={22}/></button><img src={car.image} alt={`${car.brand} ${car.model}`}/><div className="dialog-copy"><span className="eyeline">{car.type} · 現貨</span><h2 id="vehicle-dialog-title">{car.brand} {car.model}</h2><strong>{price(car.price)}</strong><p>{car.highlight}</p><dl><div><dt>出廠年份</dt><dd>{car.year}</dd></div><div><dt>行駛里數</dt><dd>{car.mileage.toLocaleString()} 公里</dd></div><div><dt>車主數目</dt><dd>{car.owners} 手</dd></div></dl><button className="dialog-cta" onClick={onChat}><MessageCircle size={17}/>向顧問查詢此車</button></div></section></div>
+  const gallery = car.gallery?.length ? car.gallery : galleryForVehicle(car.image)
+  const activePhoto = gallery[selectedPhoto] || gallery[0]
+  return <div className="vehicle-dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="vehicle-dialog" role="dialog" aria-modal="true" aria-labelledby="vehicle-dialog-title" onMouseDown={(event) => event.stopPropagation()}><button className="dialog-close" onClick={onClose} aria-label="關閉車輛詳情"><X size={22}/></button><div className="vehicle-gallery"><img src={activePhoto.url} alt={`${car.brand} ${car.model} · ${activePhoto.alt}`}/><div className="vehicle-thumbnails" aria-label={`${car.brand} ${car.model} 相片集`}>{gallery.slice(1, 5).map((photo, index) => <button key={`${photo.url}-${index}`} type="button" className={selectedPhoto === index + 1 ? 'active' : ''} onClick={() => setSelectedPhoto(index + 1)} aria-label={`查看${photo.alt}`} aria-pressed={selectedPhoto === index + 1}><img src={photo.url} alt=""/><span>{photo.alt}</span></button>)}</div></div><div className="dialog-copy"><span className="eyeline">{car.type} · 現貨</span><h2 id="vehicle-dialog-title">{car.brand} {car.model}</h2><strong>{price(car.price)}</strong><p>{car.highlight}</p><dl><div><dt>出廠年份</dt><dd>{car.year}</dd></div><div><dt>行駛里數</dt><dd>{car.mileage.toLocaleString()} 公里</dd></div><div><dt>車主數目</dt><dd>{car.owners} 手</dd></div></dl><button className="dialog-cta" onClick={onChat}><MessageCircle size={17}/>向顧問查詢此車</button></div></section></div>
 }
 
 function ChatWidget({ open, setOpen, messages, message, setMessage, send, status, error }) {
