@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Archive, Check, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Archive, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminChatDesk from './AdminChatDesk'
 
@@ -24,6 +24,7 @@ export default function AdminDashboard({ onSignOut }) {
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
   const [photos, setPhotos] = useState({})
+  const [submissionPreview, setSubmissionPreview] = useState(null)
 
   const load = async () => {
     const [vehicleResult, submissionResult] = await Promise.all([
@@ -32,8 +33,26 @@ export default function AdminDashboard({ onSignOut }) {
     ])
     if (vehicleResult.error) setNotice(`未能讀取車盤：${vehicleResult.error.message}`)
     else setVehicles(vehicleResult.data || [])
-    if (submissionResult.error) setNotice(`未能讀取客戶提交：${submissionResult.error.message}`)
-    else setSubmissions(submissionResult.data || [])
+    if (submissionResult.error) {
+      setNotice(`未能讀取客戶提交：${submissionResult.error.message}`)
+    } else {
+      const rawSubmissions = submissionResult.data || []
+      const imagePaths = [...new Set(rawSubmissions.flatMap((item) => item.image_paths || []))]
+      let signedUrls = {}
+      if (imagePaths.length) {
+        const { data, error } = await supabase.storage.from('seller-submissions').createSignedUrls(imagePaths, 900)
+        if (error) setNotice(`未能載入客戶相片：${error.message}`)
+        else signedUrls = Object.fromEntries((data || []).filter((image) => image.signedUrl).map((image) => [image.path, image.signedUrl]))
+      }
+      setSubmissions(rawSubmissions.map((item) => ({
+        ...item,
+        signed_images: (item.image_paths || []).map((path, index) => ({
+          path,
+          url: signedUrls[path],
+          label: photoSlots[index]?.label || `相片 ${index + 1}`,
+        })).filter((image) => image.url),
+      })))
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -143,7 +162,18 @@ export default function AdminDashboard({ onSignOut }) {
       <div className="admin-live-grid">
         <section className="live-list">
           <div className="live-list-head"><h2>客戶提交</h2><b>{submissions.filter((item) => item.status === 'pending').length} 待審閱</b></div>
-          {submissions.length === 0 ? <p className="live-empty">暫未收到客戶賣車提交。</p> : submissions.map((item) => <article className="live-submission" key={item.id}><b>{item.car_name}</b><small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small><small>已附相片：{item.image_paths?.length || 0} / 5 張</small><small>狀態：{item.status}</small>{item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}</article>)}
+          {submissions.length === 0 ? <p className="live-empty">暫未收到客戶賣車提交。</p> : submissions.map((item) => <article className="live-submission" key={item.id}>
+            <b>{item.car_name}</b>
+            <small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small>
+            <small>已附相片：{item.image_paths?.length || 0} / 5 張</small>
+            {item.signed_images.length > 0 ? <div className="submission-photo-strip" aria-label={`${item.car_name} 車況相片`}>
+              {item.signed_images.map((image) => <button type="button" key={image.path} onClick={() => setSubmissionPreview({ ...image, carName: item.car_name })}>
+                <img src={image.url} alt={`${item.car_name}：${image.label}`}/><span>{image.label}</span>
+              </button>)}
+            </div> : (item.image_paths?.length || 0) > 0 ? <small className="submission-photo-warning">相片暫時未能載入，請按頁面重新整理重試。</small> : <small className="submission-photo-empty">此示範提交未附有客戶相片。</small>}
+            <small>狀態：{item.status}</small>
+            {item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}
+          </article>)}
           <hr/>
           <div className="live-list-head"><h2>已上架及草稿</h2><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
           {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => <article className="live-vehicle" key={vehicle.id}>
@@ -184,5 +214,12 @@ export default function AdminDashboard({ onSignOut }) {
         </section>
       </div>
     </main>
+    {submissionPreview && <div className="submission-preview-backdrop" role="presentation" onMouseDown={() => setSubmissionPreview(null)}>
+      <section className="submission-preview-dialog" role="dialog" aria-modal="true" aria-label={`${submissionPreview.carName} ${submissionPreview.label}`} onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" className="submission-preview-close" aria-label="關閉相片預覽" onClick={() => setSubmissionPreview(null)}><X size={21}/></button>
+        <img src={submissionPreview.url} alt={`${submissionPreview.carName}：${submissionPreview.label}`}/>
+        <p>{submissionPreview.carName} · {submissionPreview.label}</p>
+      </section>
+    </div>}
   </div>
 }
