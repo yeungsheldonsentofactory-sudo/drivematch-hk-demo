@@ -11,12 +11,6 @@ const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
 const asset = (name) => `${basePath}assets/${name}`
 const fallbackImages = { Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'), Toyota: asset('toyota-alphard-studio.png'), 'Mercedes-Benz': asset('mercedes-e300-studio-v2.png'), 'Mercedes‑Benz': asset('mercedes-e300-studio-v2.png'), Lexus: asset('lexus-ls500h-studio-v2.png') }
 
-const brands = [
-  ['F', 'Ferrari'], ['L', 'Lamborghini'], ['M', 'McLaren'], ['P', 'Porsche'],
-  ['R', 'Rolls‑Royce'], ['B', 'BMW'], ['A', 'Audi'], ['T', 'Tesla'], ['T', 'Toyota'],
-  ['L', 'Lexus'], ['M', 'Mercedes‑Benz'],
-]
-
 const cars = [
   { id: 1, brand: 'Ferrari', model: 'SF90 Stradale', type: '超級跑車', year: 2022, price: 5980000, mileage: 8200, owners: 1, added: 6, highlight: '4.0L V8 混能 · 780 匹馬力', image: asset('supercar-sf90.png') },
   { id: 2, brand: 'Porsche', model: '911 Carrera S', type: '跑車', year: 2021, price: 1598000, mileage: 12500, owners: 2, added: 11, highlight: '3.0L 雙渦輪 · Sport Chrono', image: asset('porsche-911-carrera-studio-v2.png') },
@@ -41,11 +35,10 @@ const submissionSeed = [
 
 const price = (value) => `HK$${value.toLocaleString('en-HK')}`
 
-function Header({ screen, onScreen, selectedBrand, setSelectedBrand }) {
+function Header({ screen, onScreen }) {
   return <header className="apex-header">
     <a className="skip-link" href="#main-content">跳至主要內容</a>
     <button className="apex-brand" onClick={() => onScreen('buyer')} aria-label="DriveMatch 首頁">Apex <span>Motor Gallery</span></button>
-    {screen === 'buyer' && <nav className="brand-rail" aria-label="按品牌快速篩選">{brands.map(([mark, name]) => <button className={`brand-mark ${selectedBrand === name ? 'selected' : ''}`} key={name} aria-pressed={selectedBrand === name} title={`篩選 ${name}`} onClick={() => setSelectedBrand(selectedBrand === name ? '' : name)}><b aria-hidden="true">{mark}</b><small>{name.replace('Mercedes‑Benz', 'Mercedes')}</small></button>)}</nav>}
     <div className="header-actions"><button className={`header-cta ${screen === 'buyer' ? 'soft-active' : ''}`} onClick={() => onScreen('buyer')}><UserRound size={16}/><span className="cta-full">我是買家</span><span className="cta-compact">買家</span></button><button className={`header-cta sell ${screen === 'seller' ? 'sell-active' : ''}`} onClick={() => onScreen('seller')}><CarFront size={16}/><span className="cta-full">我是賣家</span><span className="cta-compact">賣車</span></button><button className="admin-entry" onClick={() => onScreen('login')}>管理員登入</button></div>
   </header>
 }
@@ -90,7 +83,7 @@ function BuyerHome({ onScreen }) {
   const selectSuggestion = (item) => { setSelectedBrand(item.brand); setQuery(item.model === 'SF90 Spider' ? 'SF90' : item.model) }
   const clearFilters = () => { setSelectedBrand(''); setSelectedTypes([]); setQuery('') }
   const toggleType = (type) => setSelectedTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type])
-  return <div className="site-shell"><Header screen="buyer" onScreen={onScreen} selectedBrand={selectedBrand} setSelectedBrand={setSelectedBrand}/><main id="main-content" className="buyer-main">
+  return <div className="site-shell"><Header screen="buyer" onScreen={onScreen}/><main id="main-content" className="buyer-main">
     <section className="search-stage" aria-labelledby="buyer-title"><span className="eyeline search-eyeline"><Sparkles size={14}/>精選現貨 · 香港</span><h1 id="buyer-title">每架現貨，都值得親身細看。</h1><p>從超級跑車到七人商務車，精選現貨即時更新。</p><div className="intelligent-search"><Search size={22} aria-hidden="true"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋車款、品牌或型號，例如 Ferrari SF" aria-label="智能搜尋車款" autoComplete="off"/><button className={query ? 'search-clear visible' : 'search-clear'} aria-label="清除搜尋" onClick={() => setQuery('')} disabled={!query}><X size={18}/></button></div>{searchMatches.length > 0 && <div className="suggestion-menu" role="listbox" aria-label="搜尋建議">{searchMatches.map((item) => <button role="option" key={item.label} onClick={() => selectSuggestion(item)}><img src={item.image} alt=""/><span>{item.label}</span><ArrowUpRight size={17}/></button>)}</div>}</section>
     <section className="inventory-section" aria-labelledby="inventory-title"><div className="inventory-toolbar"><div><span className="eyeline">現貨車盤</span><h2 id="inventory-title">{selectedBrand ? `${selectedBrand} 精選現貨` : '今日精選現貨'}</h2><p className="result-count" aria-live="polite">共 {inventory.length} 架符合條件的現貨{filterCount ? ` · 已套用 ${filterCount} 個篩選` : ''}</p></div><div className="toolbar-controls"><button className={`filter-button ${filterCount ? 'filter-active' : ''}`} onClick={() => setFilterOpen((open) => !open)} aria-expanded={filterOpen} aria-controls="inventory-filters"><SlidersHorizontal size={17}/>篩選條件{filterCount ? <b>{filterCount}</b> : null}</button><label className="sort-select"><span className="sr-only">排序</span>排序：<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="random">隨機顯示</option><option value="low">價錢：低至高</option><option value="high">價錢：高至低</option><option value="new">上架日期：最新</option><option value="old">上架日期：最舊</option><option value="year">出廠年份</option><option value="mileage">行駛里數</option><option value="owners">車主擁有數</option></select><ChevronDown size={15}/></label></div></div>
       {filterOpen && <div id="inventory-filters" className="filter-panel"><div><span className="filter-label">車種</span><div className="filter-chips">{vehicleTypes.map((type) => <button key={type} className={selectedTypes.includes(type) ? 'selected' : ''} aria-pressed={selectedTypes.includes(type)} onClick={() => toggleType(type)}>{type}</button>)}</div></div><div className="filter-panel-footer"><span>{filterCount ? '選擇更多條件以縮小範圍' : '未選擇額外篩選條件'}</span><button onClick={clearFilters} disabled={!filterCount && !query}>清除全部</button></div></div>}
