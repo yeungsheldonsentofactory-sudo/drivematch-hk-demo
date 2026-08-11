@@ -99,7 +99,7 @@ export default function AdminDashboard({ onSignOut }) {
       <div className="admin-live-grid">
         <section className="live-list">
           <div className="live-list-head"><h2>客戶提交</h2><b>{submissions.filter((item) => item.status === 'pending').length} 待審閱</b></div>
-          {submissions.length === 0 ? <p className="live-empty">暫未收到客戶賣車提交。</p> : submissions.map((item) => <article className="live-submission" key={item.id}><b>{item.car_name}</b><small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small><small>狀態：{item.status}</small>{item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}</article>)}
+          {submissions.length === 0 ? <p className="live-empty">暫未收到客戶賣車提交。</p> : submissions.map((item) => <article className="live-submission" key={item.id}><b>{item.car_name}</b><small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small><small>已附相片：{item.image_paths?.length || 0} / 5 張</small><small>狀態：{item.status}</small>{item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}</article>)}
           <hr/>
           <div className="live-list-head"><h2>已上架及草稿</h2><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
           {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => <article className="live-vehicle" key={vehicle.id}>

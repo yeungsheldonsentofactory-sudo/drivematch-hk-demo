@@ -103,6 +103,99 @@ function ChatWidget({ open, setOpen, chat, message, setMessage, send }) {
   return <div className="chat-wrap">{open && <section className="chat-panel" aria-label="線上客服對話"><header><div><span className="online-dot"/>線上客服<small>通常 5 分鐘內回覆</small></div><button onClick={() => setOpen(false)} aria-label="關閉線上客服"><X size={18}/></button></header><div className="chat-log" aria-live="polite">{chat.map((item, index) => <p key={`${item.body}-${index}`} className={item.from}>{item.body}</p>)}</div><form onSubmit={send}><input value={message} onChange={(event) => setMessage(event.target.value)} placeholder="輸入訊息…" aria-label="輸入客服訊息"/><button aria-label="發送訊息"><Send size={18}/></button></form></section>}<button className="chat-launcher" onClick={() => setOpen(!open)} aria-expanded={open}><span className="online-dot"/><MessageCircle size={23}/><b>線上客服</b></button></div>
 }
 
+const requiredSellerPhotos = [
+  { key: 'front', label: '車頭', hint: '正面完整車頭' },
+  { key: 'rear', label: '車尾', hint: '正面完整車尾' },
+  { key: 'left', label: '車身左側', hint: '左側全車身' },
+  { key: 'right', label: '車身右側', hint: '右側全車身' },
+  { key: 'interior', label: '車內籠', hint: '前排與內籠狀況' },
+]
+
+function SellerPageRequiredPhotos({ onScreen }) {
+  const photoRefs = useRef({})
+  const formRef = useRef(null)
+  const [photos, setPhotos] = useState({})
+  const [form, setForm] = useState(emptySellerForm)
+  const [touched, setTouched] = useState({})
+  const [submitted, setSubmitted] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chat, setChat] = useState(() => JSON.parse(localStorage.getItem('apex-chat') || '[{"from":"agent","body":"你好，有咩車款想了解？"}]'))
+  const [message, setMessage] = useState('')
+  const completePhotos = requiredSellerPhotos.every((slot) => photos[slot.key]?.file)
+  const errors = {
+    carName: !form.carName.trim() ? '請填寫車廠及型號。' : '',
+    year: !/^20\d{2}$/.test(form.year) ? '請輸入四位數出廠年份。' : '',
+    import: !form.import ? '請選擇水貨或行貨。' : '',
+    owners: !form.owners ? '請填寫車主數目。' : '',
+    mileage: !form.mileage ? '請填寫總行駛里程。' : '',
+    name: !form.name.trim() ? '請填寫聯絡人姓名。' : '',
+    phone: !form.phone.trim() ? '請填寫電話號碼。' : '',
+    email: form.email && !/^\S+@\S+\.\S+$/.test(form.email) ? '請輸入有效電郵地址。' : '',
+    photos: completePhotos ? '' : '請按指定角度上載全部 5 張相片。',
+  }
+  const update = (name, value) => setForm((current) => ({ ...current, [name]: value }))
+  const touch = (name) => setTouched((current) => ({ ...current, [name]: true }))
+  const setPhoto = (slot, file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { setSubmitError('請選擇 JPG、PNG、WEBP 等圖片檔案。'); return }
+    if (file.size > 10 * 1024 * 1024) { setSubmitError('每張相片不可超過 10MB。'); return }
+    setSubmitError('')
+    setPhotos((current) => {
+      if (current[slot.key]?.url) URL.revokeObjectURL(current[slot.key].url)
+      return { ...current, [slot.key]: { file, url: URL.createObjectURL(file) } }
+    })
+    touch('photos')
+  }
+  const removePhoto = (slot) => {
+    setPhotos((current) => {
+      if (current[slot.key]?.url) URL.revokeObjectURL(current[slot.key].url)
+      const next = { ...current }
+      delete next[slot.key]
+      return next
+    })
+    touch('photos')
+  }
+  const submit = async (event) => {
+    event.preventDefault()
+    setTouched(Object.fromEntries(Object.keys(errors).map((key) => [key, true])))
+    if (Object.values(errors).some(Boolean)) {
+      window.requestAnimationFrame(() => formRef.current?.querySelector('[aria-invalid="true"]')?.focus())
+      return
+    }
+    setUploading(true)
+    setSubmitError('')
+    const folder = `submissions/${crypto.randomUUID()}`
+    try {
+      const imagePaths = await Promise.all(requiredSellerPhotos.map(async (slot) => {
+        const file = photos[slot.key].file
+        const filename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `${folder}/${slot.key}-${filename}`
+        const { error } = await supabase.storage.from('seller-submissions').upload(path, file, { contentType: file.type, upsert: false })
+        if (error) throw error
+        return path
+      }))
+      const { error } = await supabase.from('seller_submissions').insert({
+        car_name: form.carName.trim(), year: Number(form.year), registration_year: form.registrationYear ? Number(form.registrationYear) : null,
+        import_type: form.import, owner_count: Number(form.owners), mileage_km: Number(String(form.mileage).replace(/[^0-9]/g, '')),
+        color: form.color.trim() || null, options: form.options.trim() || null, history: form.history.trim() || null,
+        contact_name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() || null, image_paths: imagePaths, status: 'pending',
+      })
+      if (error) throw error
+      setSubmitted(true)
+    } catch (error) {
+      setSubmitError(`提交失敗：${error.message || '請稍後再試。'}`)
+    } finally {
+      setUploading(false)
+    }
+  }
+  const send = (event) => { event.preventDefault(); if (!message.trim()) return; const next = [...chat, { from: 'buyer', body: message.trim() }]; setChat(next); localStorage.setItem('apex-chat', JSON.stringify(next)); setMessage('') }
+  if (submitted) return <div className="site-shell"><Header screen="seller" onScreen={onScreen}/><main id="main-content" className="seller-layout confirmation"><Check size={36}/><h1>已收到你的車輛資料</h1><p>五張指定角度相片及車輛資料已安全送交內部審閱；車盤不會直接公開。</p><button className="dark-button" onClick={() => onScreen('buyer')}>返回現貨車盤</button></main></div>
+  const hasVisibleErrors = Object.values(touched).some(Boolean) && Object.values(errors).some(Boolean)
+  return <div className="site-shell"><Header screen="seller" onScreen={onScreen}/><main id="main-content" className="seller-layout"><button className="back-link" onClick={() => onScreen('buyer')}><ArrowLeft size={17}/>返回買家瀏覽</button><div className="seller-heading"><span className="eyeline">賣家專區</span><h1>讓專業團隊，替你的愛車找對下一位車主。</h1><p>提交資料後由內部審閱，不會直接顯示在網站。</p></div><div className="seller-choice"><section><FileText size={26}/><h2>提交車輛資訊</h2><p>請提供五個指定角度的相片，讓團隊可先作初步評估。</p></section><section><MessageCircle size={26}/><h2>線上客服查詢賣車</h2><p>即時與顧問討論估值、交車及寄賣安排。</p><button className="outline-button" onClick={() => setChatOpen(true)}>開啟線上客服</button></section></div><form ref={formRef} className="seller-form" onSubmit={submit} noValidate><div className="form-title"><div><h2>車輛資料及相片</h2><p>五張指定角度相片均為必填，資料會安全保留作內部審閱。</p></div><span className="form-progress" aria-label="表單進度">1 車輛資料 <i/> 2 聯絡方式</span></div>{hasVisibleErrors && <div className="form-error-summary" role="alert"><strong>請先處理標示的必填欄位。</strong><span>必須上載全部五個指定角度的相片。</span></div>}<section className={`required-photo-section ${touched.photos && errors.photos ? 'field-invalid' : ''}`} aria-labelledby="required-photo-title"><div className="required-photo-heading"><div><span className="eyeline">必填相片</span><h3 id="required-photo-title">上載 5 張指定角度相片</h3></div><b>{Object.keys(photos).length} / 5</b></div><div className="required-photo-grid">{requiredSellerPhotos.map((slot) => { const photo = photos[slot.key]; return <div className="required-photo-slot" key={slot.key}><button type="button" className={photo ? 'photo-slot-filled' : ''} onClick={() => photoRefs.current[slot.key]?.click()} aria-label={`上載${slot.label}`}>{photo ? <img src={photo.url} alt={`${slot.label}預覽`}/> : <><UploadCloud size={25}/><strong>{slot.label}</strong><span>{slot.hint}</span></>} </button><input ref={(node) => { photoRefs.current[slot.key] = node }} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(slot, event.target.files?.[0]); event.target.value = '' }}/>{photo && <button className="replace-photo" type="button" onClick={() => photoRefs.current[slot.key]?.click()}>更換</button>}{photo && <button className="remove-photo" type="button" onClick={() => removePhoto(slot)} aria-label={`移除${slot.label}`}><X size={14}/></button>}</div> })}</div><small className="required-photo-note">JPG、PNG 或 WEBP；每張最多 10MB。上載後可隨時更換。</small></section>{touched.photos && errors.photos && <p className="field-error" role="alert">{errors.photos}</p>}<div className="form-grid"><Field label="車廠及型號" name="carName" value={form.carName} onChange={update} onBlur={touch} error={touched.carName && errors.carName} required placeholder="例如 Mercedes‑Benz S 500 L" autoComplete="off"/><Field label="出廠年份" name="year" value={form.year} onChange={update} onBlur={touch} error={touched.year && errors.year} required placeholder="例如 2021" inputMode="numeric" maxLength="4"/><Field label="香港首次登記年份" name="registrationYear" value={form.registrationYear} onChange={update} onBlur={touch} placeholder="例如 2021" inputMode="numeric" maxLength="4"/><SelectField label="水貨 / 行貨" name="import" value={form.import} onChange={update} onBlur={touch} error={touched.import && errors.import} required options={['水貨 / 平行進口', '行貨']}/><Field label="車主數目" name="owners" value={form.owners} onChange={update} onBlur={touch} error={touched.owners && errors.owners} required placeholder="例如 1" inputMode="numeric"/><Field label="總行駛里程數" name="mileage" value={form.mileage} onChange={update} onBlur={touch} error={touched.mileage && errors.mileage} required placeholder="例如 28,500 公里" inputMode="numeric"/><Field label="車輛顏色" name="color" value={form.color} onChange={update} onBlur={touch} placeholder="例如 黑色"/><TextField label="車輛選配" name="options" value={form.options} onChange={update} onBlur={touch} placeholder="例如 全景天窗、升級音響、駕駛輔助套件"/><TextField label="事故及維修紀錄" name="history" value={form.history} onChange={update} onBlur={touch} placeholder="請如實填寫事故、維修或保養紀錄"/></div><div className="contact-block"><div><span className="eyeline">聯絡方式</span><h2>方便我們聯絡你</h2><p>資料只會用於本次車輛評估及跟進。</p></div><div className="form-grid"><Field label="聯絡人姓名" name="name" value={form.name} onChange={update} onBlur={touch} error={touched.name && errors.name} required placeholder="你的姓名" autoComplete="name"/><Field label="電話號碼" name="phone" value={form.phone} onChange={update} onBlur={touch} error={touched.phone && errors.phone} required placeholder="例如 9123 4567" type="tel" autoComplete="tel" inputMode="tel"/><Field label="電郵地址（選填）" name="email" value={form.email} onChange={update} onBlur={touch} error={touched.email && errors.email} placeholder="name@example.com" type="email" autoComplete="email"/></div></div>{submitError && <p className="form-submit-error" role="alert">{submitError}</p>}<button className="dark-button submit-sale" disabled={uploading}>{uploading ? '正在安全上載 5 張相片…' : <>提交資料供內部審閱 <ArrowUpRight size={17}/></>}</button></form></main><ChatWidget open={chatOpen} setOpen={setChatOpen} chat={chat} message={message} setMessage={setMessage} send={send}/></div>
+}
+
 const emptySellerForm = { carName: '', year: '', registrationYear: '', import: '', owners: '', mileage: '', color: '', options: '', history: '', name: '', phone: '', email: '' }
 
 function SellerPage({ onScreen }) {
@@ -170,7 +263,7 @@ function App() {
   const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); navigate('buyer') }
   if (screen === 'admin') return admin ? <AdminDashboard onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
-  return screen === 'seller' ? <SellerPage onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
+  return screen === 'seller' ? <SellerPageRequiredPhotos onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
 }
 
 export default App
