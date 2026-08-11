@@ -5,6 +5,7 @@ import {
   ShieldCheck, SlidersHorizontal, Sparkles, UploadCloud, UserRound, X,
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import AdminDashboard from './AdminDashboard'
 
 const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
 const asset = (name) => `${basePath}assets/${name}`
@@ -157,7 +158,7 @@ function AdminLogin({ onScreen, onAuthenticated }) {
   return <div className="site-shell"><Header screen="login" onScreen={onScreen}/><main id="main-content" className="admin-login"><form onSubmit={submit}><span className="eyeline">內部系統</span><h1>管理員登入</h1><p>只限獲授權的 DriveMatch 團隊成員。</p><label>電郵地址<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required/></label><label>密碼<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required/></label>{error && <p className="login-error" role="alert">{error}</p>}<button className="dark-button" disabled={loading}>{loading ? '正在驗證…' : '登入管理系統'} <ArrowUpRight size={17}/></button><button type="button" className="back-link" onClick={() => onScreen('buyer')}>返回公開車盤</button></form></main></div>
 }
 
-function AdminPanel({ onSignOut }) {
+function LegacyAdminPanel({ onSignOut }) {
   const [selected, setSelected] = useState(submissionSeed[0])
   const [notes, setNotes] = useState(['需要留牌', '無牌費', '進口車'])
   const [action, setAction] = useState('')
@@ -171,7 +172,7 @@ function App() {
   useEffect(() => { const sync = () => setScreen(window.location.hash === '#admin' ? 'admin' : window.location.hash === '#login' ? 'login' : 'buyer'); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
   const navigate = (next) => { if (next === 'admin' || next === 'login') window.location.hash = next; else { window.history.replaceState(null, '', window.location.pathname); setScreen(next) } }
   const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); navigate('buyer') }
-  if (screen === 'admin') return admin ? <AdminPanel onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
+  if (screen === 'admin') return admin ? <AdminDashboard onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   return screen === 'seller' ? <SellerPage onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
 }
