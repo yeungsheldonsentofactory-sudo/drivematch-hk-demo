@@ -266,9 +266,35 @@ function LegacyAdminPanel({ onSignOut }) {
 function App() {
   const [screen, setScreen] = useState(() => window.location.hash === '#admin' ? 'admin' : window.location.hash === '#login' ? 'login' : 'buyer')
   const [admin, setAdmin] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
   useEffect(() => { const sync = () => setScreen(window.location.hash === '#admin' ? 'admin' : window.location.hash === '#login' ? 'login' : 'buyer'); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
   const navigate = (next) => { if (next === 'admin' || next === 'login') window.location.hash = next; else { window.history.replaceState(null, '', window.location.pathname); setScreen(next) } }
   const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); navigate('buyer') }
+  useEffect(() => {
+    let active = true
+    let restoreVersion = 0
+    const restoreAdmin = async (session) => {
+      const version = ++restoreVersion
+      if (!session?.user) {
+        if (active && version === restoreVersion) { setAdmin(null); setAuthReady(true) }
+        return
+      }
+      const { data: profile } = await supabase.from('profiles').select('role, display_name').eq('id', session.user.id).single()
+      if (!active || version !== restoreVersion) return
+      if (profile && ['admin', 'manager', 'staff'].includes(profile.role)) {
+        setAdmin({ user: session.user, profile })
+        if (window.location.hash !== '#admin') window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#admin`)
+        setScreen('admin')
+      } else {
+        setAdmin(null)
+      }
+      setAuthReady(true)
+    }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void restoreAdmin(session) })
+    void supabase.auth.getSession().then(({ data }) => restoreAdmin(data.session))
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
+  if (!authReady) return <div className="site-shell" role="status" aria-live="polite"/>
   if (screen === 'admin') return admin ? <AdminDashboard onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   return screen === 'seller' ? <SellerPageRequiredPhotos onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
