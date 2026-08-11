@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Archive, Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import { supabase } from './lib/supabase'
+import AdminChatDesk from './AdminChatDesk'
 
 const blank = {
   brand: '', model: '', vehicle_type: '高級家庭車', year: '', price_hkd: '', mileage_km: '', owner_count: '',
@@ -111,6 +112,7 @@ export default function AdminDashboard({ onSignOut }) {
             </div>
           </article>)}
         </section>
+        <AdminChatDesk/>
         <section className="live-editor">
           <span className="eyeline">{editing ? '修改車盤' : '新增車盤'}</span>
           <h2>{editing ? `${editing.brand} ${editing.model}` : '建立新現貨車盤'}</h2>
