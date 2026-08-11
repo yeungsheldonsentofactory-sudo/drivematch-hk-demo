@@ -32,6 +32,9 @@ export function useCustomerChat({ enabled, subject }) {
       setStatus('connecting')
       setError('')
       try {
+        // Earlier preview builds stored simulated replies under this key.
+        // Remove it once so only database-backed messages can be displayed.
+        localStorage.removeItem('apex-chat')
         const session = await ensureVisitorSession()
         if (!active || !session?.user) return
         const id = session.user.id
