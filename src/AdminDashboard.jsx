@@ -10,6 +10,11 @@ const blank = {
 }
 const numeric = ['year', 'price_hkd', 'mileage_km', 'owner_count', 'plate_fee_hkd', 'transfer_fee_hkd', 'warranty_months']
 const vehicleTypes = ['超級跑車', '跑車', '電動車', '七人商務車', '高級家庭車', '高級日本車']
+const photoSlots = [
+  { key: 'front', label: '車頭' }, { key: 'rear', label: '車尾' }, { key: 'left', label: '車身左側' },
+  { key: 'right', label: '車身右側' }, { key: 'interior', label: '車內籠' },
+]
+const vehicleImageUrl = (path) => path?.startsWith('http') ? path : supabase.storage.from('vehicle-media').getPublicUrl(path || '').data.publicUrl
 
 export default function AdminDashboard({ onSignOut }) {
   const [vehicles, setVehicles] = useState([])
@@ -18,10 +23,11 @@ export default function AdminDashboard({ onSignOut }) {
   const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
+  const [photos, setPhotos] = useState({})
 
   const load = async () => {
     const [vehicleResult, submissionResult] = await Promise.all([
-      supabase.from('vehicles').select('*').order('created_at', { ascending: false }),
+      supabase.from('vehicles').select('*, vehicle_images(id, storage_path, alt_text, sort_order)').order('created_at', { ascending: false }),
       supabase.from('seller_submissions').select('*').order('created_at', { ascending: false }),
     ])
     if (vehicleResult.error) setNotice(`未能讀取車盤：${vehicleResult.error.message}`)
@@ -33,16 +39,31 @@ export default function AdminDashboard({ onSignOut }) {
   useEffect(() => { load() }, [])
 
   const change = (key, value) => setForm((current) => ({ ...current, [key]: value }))
-  const startNew = () => { setEditing(null); setForm(blank); setNotice('') }
+  const startNew = () => { setEditing(null); setForm(blank); setPhotos({}); setNotice('') }
   const startEdit = (vehicle) => {
     setEditing(vehicle)
     setForm(Object.fromEntries(Object.entries(blank).map(([key, fallback]) => [key, vehicle[key] ?? fallback])))
+    setPhotos(Object.fromEntries([...(vehicle.vehicle_images || [])].sort((a, b) => a.sort_order - b.sort_order).slice(0, 5).map((image, index) => [photoSlots[index].key, { storagePath: image.storage_path, url: vehicleImageUrl(image.storage_path), alt: image.alt_text || photoSlots[index].label }])))
     setNotice(`正在修改：${vehicle.brand} ${vehicle.model}`)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const setPhoto = (slot, file) => {
+    if (!file) return
+    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+      setNotice('請上載 JPG、PNG 或 WEBP 圖片，每張不超過 10MB。')
+      return
+    }
+    setPhotos((current) => ({ ...current, [slot.key]: { file, url: URL.createObjectURL(file), alt: slot.label } }))
+  }
+
   const save = async (event) => {
     event.preventDefault()
+    const completedGallery = photoSlots.every((slot) => photos[slot.key])
+    if (!editing && !completedGallery) {
+      setNotice('建立車盤前，請先上載車頭、車尾、左右車身及車內籠共 5 張相片。')
+      return
+    }
     setBusyId('save')
     const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, numeric.includes(key) ? Number(value) : value]))
     payload.published_at = payload.status === 'published' ? editing?.published_at || new Date().toISOString() : null
@@ -51,10 +72,32 @@ export default function AdminDashboard({ onSignOut }) {
       : await supabase.from('vehicles').insert(payload).select('id').single()
     if (result.error) setNotice(`儲存失敗：${result.error.message}`)
     else {
-      setNotice(editing ? '車盤已更新，前台重新整理後會顯示最新資料。' : '新車盤已建立。')
-      setEditing(null)
-      setForm(blank)
-      await load()
+      try {
+        const needsGallerySync = completedGallery && (!editing || photoSlots.some((slot) => photos[slot.key]?.file))
+        if (needsGallerySync) {
+          const gallery = await Promise.all(photoSlots.map(async (slot, index) => {
+            const photo = photos[slot.key]
+            if (!photo.file) return { storage_path: photo.storagePath, alt_text: slot.label, sort_order: index }
+            const fileName = photo.file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+            const storagePath = `vehicles/${result.data.id}/${slot.key}-${crypto.randomUUID()}-${fileName}`
+            const { error: uploadError } = await supabase.storage.from('vehicle-media').upload(storagePath, photo.file, { contentType: photo.file.type, upsert: false })
+            if (uploadError) throw uploadError
+            return { storage_path: storagePath, alt_text: slot.label, sort_order: index }
+          }))
+          const { error: clearError } = await supabase.from('vehicle_images').delete().eq('vehicle_id', result.data.id)
+          if (clearError) throw clearError
+          const { error: imageError } = await supabase.from('vehicle_images').insert(gallery.map((image) => ({ ...image, vehicle_id: result.data.id })))
+          if (imageError) throw imageError
+          await supabase.from('vehicles').update({ hero_image_url: vehicleImageUrl(gallery[0].storage_path) }).eq('id', result.data.id)
+        }
+        setNotice(editing ? '車盤及相片已更新，前台重新整理後會顯示最新資料。' : '新車盤及 5 張相片已建立。')
+        setEditing(null)
+        setForm(blank)
+        setPhotos({})
+        await load()
+      } catch (galleryError) {
+        setNotice(`車盤已儲存，但相片未能完成上載：${galleryError.message}`)
+      }
     }
     setBusyId('')
   }
@@ -133,6 +176,7 @@ export default function AdminDashboard({ onSignOut }) {
             <label>驗車<select value={form.inspection_status} onChange={(event) => change('inspection_status', event.target.value)}><option value="pending">待驗證</option><option value="verified">已驗證</option><option value="not_available">未提供</option></select></label>
             <label>狀態<select value={form.status} onChange={(event) => change('status', event.target.value)}><option value="draft">草稿</option><option value="published">立即上架</option><option value="sold">已售</option><option value="archived">下架</option></select></label>
             <label className="full">車輛主圖網址<input type="url" placeholder="https://…" value={form.hero_image_url} onChange={(event) => change('hero_image_url', event.target.value)}/></label>
+            <fieldset className="admin-photo-set full"><legend>車輛相簿（5 張指定角度）</legend><p>前台詳情頁會以這 5 張實拍相片顯示可切換相簿。</p><div>{photoSlots.map((slot) => <label key={slot.key}><span>{slot.label}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(slot, event.target.files?.[0]); event.target.value = '' }}/>{photos[slot.key]?.url && <img src={photos[slot.key].url} alt={`${slot.label}預覽`}/>}</label>)}</div></fieldset>
             <label className="full">車盤亮點<input value={form.highlight} onChange={(event) => change('highlight', event.target.value)}/></label>
             <div className="editor-actions"><button className="dark-button" disabled={Boolean(busyId)}>{busyId === 'save' ? '儲存中…' : <><Check size={17}/>{editing ? '儲存修改' : '建立車盤'}</>}</button>{editing && <button className="cancel-edit" type="button" onClick={startNew} disabled={Boolean(busyId)}>取消修改</button>}</div>
           </form>

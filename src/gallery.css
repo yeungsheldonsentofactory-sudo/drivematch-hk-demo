@@ -9,8 +9,11 @@
 .vehicle-thumbnails button:hover img,.vehicle-thumbnails button.active img{opacity:1;transform:scale(1.03)}
 .vehicle-thumbnails span{position:absolute;left:0;right:0;bottom:0;padding:4px 3px;background:linear-gradient(transparent,rgba(7,16,27,.86));color:#fff;font-size:9px;font-weight:700;text-align:left}
 
+.admin-photo-set{margin:4px 0 0;padding:15px;border:1px solid #d4dce3}.admin-photo-set legend{padding:0 6px;color:#34455c;font-size:12px;font-weight:700}.admin-photo-set p{margin:0 0 12px;color:#718096;font-size:11px;line-height:1.45}.admin-photo-set>div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}.admin-photo-set label{position:relative;min-height:82px;padding:8px!important;border:1px dashed #bdc8d3;color:#516176!important;cursor:pointer}.admin-photo-set label:hover{border-color:#c41c2c}.admin-photo-set label span{font-size:10px}.admin-photo-set input{position:absolute;inset:0;width:100%!important;height:100%!important;opacity:0;cursor:pointer}.admin-photo-set img{width:100%;height:48px;object-fit:cover;margin-top:6px}
+
 @media(max-width:700px){
   .vehicle-gallery{height:285px;min-height:285px;grid-template-rows:minmax(0,1fr) 70px}
   .vehicle-thumbnails{gap:5px;padding:5px}
   .vehicle-thumbnails span{font-size:8px}
+  .admin-photo-set>div{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
