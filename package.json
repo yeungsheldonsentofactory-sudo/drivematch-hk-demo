@@ -8,6 +8,7 @@
     "build": "node scripts/build-static.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
     "@vitejs/plugin-react": "latest",
     "lucide-react": "latest",
     "react": "latest",
