@@ -9,6 +9,7 @@ import AdminDashboard from './AdminDashboard'
 
 const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
 const asset = (name) => `${basePath}assets/${name}`
+const fallbackImages = { Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'), Toyota: asset('toyota-alphard-studio.png'), 'Mercedes-Benz': asset('mercedes-e300-studio-v2.png'), 'Mercedes‑Benz': asset('mercedes-e300-studio-v2.png'), Lexus: asset('lexus-ls500h-studio-v2.png') }
 
 const brands = [
   ['F', 'Ferrari'], ['L', 'Lamborghini'], ['M', 'McLaren'], ['P', 'Porsche'],
@@ -50,6 +51,7 @@ function Header({ screen, onScreen, selectedBrand, setSelectedBrand }) {
 }
 
 function BuyerHome({ onScreen }) {
+  const [liveCars, setLiveCars] = useState([])
   const [query, setQuery] = useState('')
   const [selectedBrand, setSelectedBrand] = useState('')
   const [selectedTypes, setSelectedTypes] = useState([])
@@ -60,15 +62,16 @@ function BuyerHome({ onScreen }) {
   const [chatOpen, setChatOpen] = useState(false)
   const [chat, setChat] = useState(() => JSON.parse(localStorage.getItem('apex-chat') || '[{"from":"agent","body":"你好，有咩車款想了解？"}]'))
   const [message, setMessage] = useState('')
-  const searchMatches = query.trim().length > 1 ? suggestions.filter((item) => item.label.toLowerCase().includes(query.toLowerCase())) : []
+  const searchMatches = query.trim().length > 1 ? liveCars.filter((item) => `${item.brand} ${item.model}`.toLowerCase().includes(query.toLowerCase())).slice(0, 5).map((item) => ({ label: `${item.brand} ${item.model}`, brand: item.brand, model: item.model, image: item.image })) : []
   const filterCount = selectedTypes.length + Number(Boolean(selectedBrand))
   const inventory = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    const found = cars.filter((car) => (!selectedBrand || car.brand === selectedBrand) && (!selectedTypes.length || selectedTypes.includes(car.type)) && (!normalizedQuery || `${car.brand} ${car.model} ${car.type}`.toLowerCase().includes(normalizedQuery)))
+    const found = liveCars.filter((car) => (!selectedBrand || car.brand === selectedBrand) && (!selectedTypes.length || selectedTypes.includes(car.type)) && (!normalizedQuery || `${car.brand} ${car.model} ${car.type}`.toLowerCase().includes(normalizedQuery)))
     const result = [...found]
     const rules = { low: (a, b) => a.price - b.price, high: (a, b) => b.price - a.price, new: (a, b) => a.added - b.added, old: (a, b) => b.added - a.added, year: (a, b) => b.year - a.year, mileage: (a, b) => a.mileage - b.mileage, owners: (a, b) => a.owners - b.owners }
     return sort === 'random' ? result : result.sort(rules[sort])
-  }, [query, selectedBrand, selectedTypes, sort])
+  }, [liveCars, query, selectedBrand, selectedTypes, sort])
+  useEffect(() => { let active = true; supabase.from('vehicles').select('*').eq('status', 'published').order('published_at', { ascending: false }).then(({ data, error }) => { if (!active || error) return; setLiveCars((data || []).map((car) => ({ id: car.id, brand: car.brand, model: car.model, type: car.vehicle_type, year: car.year, price: car.price_hkd, mileage: car.mileage_km, owners: car.owner_count, added: 0, highlight: car.highlight || '已由 DriveMatch 團隊核實', image: fallbackImages[car.brand] || asset('ev-sedan.png') }))) }); return () => { active = false } }, [])
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === 'Escape') { setActiveCar(null); setFilterOpen(false) } }
     window.addEventListener('keydown', closeOnEscape)
