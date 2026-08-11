@@ -10,7 +10,7 @@ await mkdir(assets, { recursive: true })
 const run = promisify(execFile)
 await run(new URL('../node_modules/@esbuild/darwin-arm64/bin/esbuild', import.meta.url).pathname, [
   'src/main.jsx', '--bundle', '--format=esm', `--outdir=${assets.pathname}`,
-  '--entry-names=index-[hash]', '--minify', '--public-path=/drivematch-hk-demo/assets',
+  '--entry-names=index-[hash]', '--minify', '--jsx=automatic', '--public-path=/drivematch-hk-demo/assets',
 ])
 await cp(new URL('../public/assets/', import.meta.url), assets, { recursive: true, force: true })
 
