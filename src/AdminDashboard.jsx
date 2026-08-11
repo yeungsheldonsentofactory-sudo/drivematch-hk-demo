@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Archive, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Archive, Check, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminChatDesk from './AdminChatDesk'
 
@@ -25,6 +25,7 @@ export default function AdminDashboard({ onSignOut }) {
   const [busyId, setBusyId] = useState('')
   const [photos, setPhotos] = useState({})
   const [submissionPreview, setSubmissionPreview] = useState(null)
+  const [page, setPage] = useState('submissions')
 
   const load = async () => {
     const [vehicleResult, submissionResult] = await Promise.all([
@@ -58,12 +59,13 @@ export default function AdminDashboard({ onSignOut }) {
   useEffect(() => { load() }, [])
 
   const change = (key, value) => setForm((current) => ({ ...current, [key]: value }))
-  const startNew = () => { setEditing(null); setForm(blank); setPhotos({}); setNotice('') }
+  const startNew = () => { setEditing(null); setForm(blank); setPhotos({}); setNotice(''); setPage('upload') }
   const startEdit = (vehicle) => {
     setEditing(vehicle)
     setForm(Object.fromEntries(Object.entries(blank).map(([key, fallback]) => [key, vehicle[key] ?? fallback])))
     setPhotos(Object.fromEntries([...(vehicle.vehicle_images || [])].sort((a, b) => a.sort_order - b.sort_order).slice(0, 5).map((image, index) => [photoSlots[index].key, { storagePath: image.storage_path, url: vehicleImageUrl(image.storage_path), alt: image.alt_text || photoSlots[index].label }])))
     setNotice(`正在修改：${vehicle.brand} ${vehicle.model}`)
+    setPage('upload')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -151,17 +153,27 @@ export default function AdminDashboard({ onSignOut }) {
     setBusyId('')
   }
 
+  const pageTitle = { submissions: '客戶提交車輛', vehicles: '已上架車盤', upload: '內部上架系統', chat: '客戶客服對話' }[page]
+  const publishedCount = vehicles.filter((vehicle) => vehicle.status === 'published').length
+  const pendingCount = submissions.filter((item) => item.status === 'pending').length
+
   return <div className="admin-shell admin-live">
     <aside className="admin-sidebar">
       <div className="admin-logo">APEX<small>MOTOR GALLERY · HONG KONG</small></div>
-      <nav><button className="active"><Plus size={20}/>車盤管理 <b>{vehicles.length}</b></button></nav>
+      <nav>
+        <button className={page === 'submissions' ? 'active' : ''} onClick={() => setPage('submissions')}><Check size={20}/>客戶提交 <b>{pendingCount}</b></button>
+        <button className={page === 'vehicles' ? 'active' : ''} onClick={() => setPage('vehicles')}><Archive size={20}/>已上架車盤 <b>{publishedCount}</b></button>
+        <button className={page === 'upload' ? 'active' : ''} onClick={startNew}><Plus size={20}/>內部上架</button>
+        <button className={page === 'chat' ? 'active' : ''} onClick={() => setPage('chat')}><MessageCircle size={20}/>客服對話</button>
+      </nav>
       <button className="admin-return" onClick={onSignOut}>登出管理系統</button>
     </aside>
     <main className="admin-main">
-      <header className="admin-top"><h1>真實車盤管理</h1><span>已連接 Supabase</span></header>
-      <div className="admin-live-grid">
-        <section className="live-list">
-          <div className="live-list-head"><h2>客戶提交</h2><b>{submissions.filter((item) => item.status === 'pending').length} 待審閱</b></div>
+      <header className="admin-top"><div><span className="eyeline">管理後台</span><h1>{pageTitle}</h1></div><span>已連接 Supabase</span></header>
+      <div className="admin-page">
+        {notice && <p className="admin-notice admin-page-notice"><Check size={16}/>{notice}</p>}
+        {page === 'submissions' && <section className="live-list admin-section">
+          <div className="live-list-head"><div><span className="eyeline">賣家審閱</span><h2>客戶提交車輛</h2></div><b>{pendingCount} 待審閱</b></div>
           {submissions.length === 0 ? <p className="live-empty">暫未收到客戶賣車提交。</p> : submissions.map((item) => <article className="live-submission" key={item.id}>
             <b>{item.car_name}</b>
             <small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small>
@@ -174,8 +186,9 @@ export default function AdminDashboard({ onSignOut }) {
             <small>狀態：{item.status}</small>
             {item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}
           </article>)}
-          <hr/>
-          <div className="live-list-head"><h2>已上架及草稿</h2><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
+        </section>}
+        {page === 'vehicles' && <section className="live-list admin-section">
+          <div className="live-list-head"><div><span className="eyeline">公開庫存</span><h2>已上架車盤</h2></div><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
           {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => <article className="live-vehicle" key={vehicle.id}>
             <div><b>{vehicle.brand} {vehicle.model}</b><small>{vehicle.year} · HK${Number(vehicle.price_hkd).toLocaleString('en-HK')} · {vehicle.status === 'published' ? '已上架' : vehicle.status === 'archived' ? '已下架' : '草稿'}</small></div>
             <div className="live-vehicle-actions">
@@ -184,9 +197,8 @@ export default function AdminDashboard({ onSignOut }) {
               <button className="delete-action" onClick={() => remove(vehicle)} disabled={Boolean(busyId)}><Trash2 size={15}/>刪除</button>
             </div>
           </article>)}
-        </section>
-        <AdminChatDesk/>
-        <section className="live-editor">
+        </section>}
+        {page === 'upload' && <section className="live-editor admin-section">
           <span className="eyeline">{editing ? '修改車盤' : '新增車盤'}</span>
           <h2>{editing ? `${editing.brand} ${editing.model}` : '建立新現貨車盤'}</h2>
           <p>{editing ? '儲存後會即時更新資料庫；若目前已上架，前台重新整理便會看到改動。' : '設定為「立即上架」後，會在公開車盤頁出現。'}</p>
@@ -210,8 +222,8 @@ export default function AdminDashboard({ onSignOut }) {
             <label className="full">車盤亮點<input value={form.highlight} onChange={(event) => change('highlight', event.target.value)}/></label>
             <div className="editor-actions"><button className="dark-button" disabled={Boolean(busyId)}>{busyId === 'save' ? '儲存中…' : <><Check size={17}/>{editing ? '儲存修改' : '建立車盤'}</>}</button>{editing && <button className="cancel-edit" type="button" onClick={startNew} disabled={Boolean(busyId)}>取消修改</button>}</div>
           </form>
-          {notice && <p className="admin-notice live-notice"><Check size={16}/>{notice}</p>}
-        </section>
+        </section>}
+        {page === 'chat' && <section className="admin-chat-page"><AdminChatDesk/></section>}
       </div>
     </main>
     {submissionPreview && <div className="submission-preview-backdrop" role="presentation" onMouseDown={() => setSubmissionPreview(null)}>
