@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Archive, Check, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArrowLeft, Check, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminChatDesk from './AdminChatDesk'
 
@@ -16,7 +16,7 @@ const photoSlots = [
 ]
 const vehicleImageUrl = (path) => path?.startsWith('http') ? path : supabase.storage.from('vehicle-media').getPublicUrl(path || '').data.publicUrl
 
-export default function AdminDashboard({ onSignOut }) {
+export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const [vehicles, setVehicles] = useState([])
   const [submissions, setSubmissions] = useState([])
   const [form, setForm] = useState(blank)
@@ -169,7 +169,7 @@ export default function AdminDashboard({ onSignOut }) {
       <button className="admin-return" onClick={onSignOut}>登出管理系統</button>
     </aside>
     <main className="admin-main">
-      <header className="admin-top"><div><span className="eyeline">管理後台</span><h1>{pageTitle}</h1></div><span>已連接 Supabase</span></header>
+      <header className="admin-top"><div><span className="eyeline">管理後台</span><h1>{pageTitle}</h1></div><button type="button" className="return-frontend" onClick={onReturnFrontend}><ArrowLeft size={16}/>返回前台</button></header>
       <div className="admin-page">
         {notice && <p className="admin-notice admin-page-notice"><Check size={16}/>{notice}</p>}
         {page === 'submissions' && <section className="live-list admin-section">

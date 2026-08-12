@@ -295,7 +295,7 @@ function App() {
     return () => { active = false; subscription.unsubscribe() }
   }, [])
   if (!authReady) return <div className="site-shell" role="status" aria-live="polite"/>
-  if (screen === 'admin') return admin ? <AdminDashboard onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
+  if (screen === 'admin') return admin ? <AdminDashboard onReturnFrontend={() => navigate('buyer')} onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
   return screen === 'seller' ? <SellerPageRequiredPhotos onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
 }
