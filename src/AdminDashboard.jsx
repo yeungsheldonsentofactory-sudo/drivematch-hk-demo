@@ -46,9 +46,10 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
     } else {
       const rawSubmissions = submissionResult.data || []
       const imagePaths = [...new Set(rawSubmissions.flatMap((item) => item.image_paths || []))]
+      const storagePaths = imagePaths.filter((path) => !/^https?:\/\//i.test(path))
       let signedUrls = {}
-      if (imagePaths.length) {
-        const { data, error } = await supabase.storage.from('seller-submissions').createSignedUrls(imagePaths, 900)
+      if (storagePaths.length) {
+        const { data, error } = await supabase.storage.from('seller-submissions').createSignedUrls(storagePaths, 900)
         if (error) setNotice(`未能載入客戶相片：${error.message}`)
         else signedUrls = Object.fromEntries((data || []).filter((image) => image.signedUrl).map((image) => [image.path, image.signedUrl]))
       }
@@ -56,7 +57,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
         ...item,
         signed_images: (item.image_paths || []).map((path, index) => ({
           path,
-          url: signedUrls[path],
+          url: /^https?:\/\//i.test(path) ? path : signedUrls[path],
           label: photoSlots[index]?.label || `相片 ${index + 1}`,
         })).filter((image) => image.url),
       })))
