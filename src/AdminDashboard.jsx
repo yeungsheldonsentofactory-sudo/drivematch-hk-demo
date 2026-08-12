@@ -14,7 +14,7 @@ const photoSlots = [
   { key: 'front', label: '車頭' }, { key: 'rear', label: '車尾' }, { key: 'left', label: '車身左側' },
   { key: 'right', label: '車身右側' }, { key: 'interior', label: '車內籠' },
 ]
-const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
+const basePath = import.meta.env?.BASE_URL || './'
 const asset = (name) => `${basePath}assets/${name}`
 const fallbackVehicleImages = {
   Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'),

@@ -10,7 +10,7 @@ await mkdir(assets, { recursive: true })
 const run = promisify(execFile)
 await run(new URL('../node_modules/@esbuild/darwin-arm64/bin/esbuild', import.meta.url).pathname, [
   'src/main.jsx', '--bundle', '--format=esm', `--outdir=${assets.pathname}`,
-  '--entry-names=index-[hash]', '--minify', '--jsx=automatic', '--public-path=/drivematch-hk-demo/assets',
+  '--entry-names=index-[hash]', '--minify', '--jsx=automatic', '--public-path=assets',
 ])
 await cp(new URL('../public/assets/', import.meta.url), assets, { recursive: true, force: true })
 
@@ -27,11 +27,11 @@ await writeFile(new URL('../dist/index.html', import.meta.url), `<!doctype html>
     <meta name="theme-color" content="#13263e" />
     <meta name="description" content="DriveMatch Hong Kong 精選現貨汽車買賣展示平台。" />
     <title>DriveMatch HK · 精選現貨汽車</title>
-    <link rel="stylesheet" href="/drivematch-hk-demo/assets/${stylesheet}" />
+    <link rel="stylesheet" href="assets/${stylesheet}" />
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/drivematch-hk-demo/assets/${script}"></script>
+    <script type="module" src="assets/${script}"></script>
   </body>
 </html>
 `)

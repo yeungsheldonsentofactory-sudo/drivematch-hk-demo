@@ -8,7 +8,7 @@ import { supabase } from './lib/supabase'
 import AdminDashboard from './AdminDashboard'
 import { useCustomerChat } from './useCustomerChat'
 
-const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
+const basePath = import.meta.env?.BASE_URL || './'
 const asset = (name) => `${basePath}assets/${name}`
 const adminIdleTimeoutMs = 30 * 60 * 1000
 const adminIdleKey = (userId) => `drivematch-admin-last-activity-${userId}`
