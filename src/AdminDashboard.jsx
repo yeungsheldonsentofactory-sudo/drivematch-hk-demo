@@ -14,7 +14,14 @@ const photoSlots = [
   { key: 'front', label: '車頭' }, { key: 'rear', label: '車尾' }, { key: 'left', label: '車身左側' },
   { key: 'right', label: '車身右側' }, { key: 'interior', label: '車內籠' },
 ]
+const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
+const asset = (name) => `${basePath}assets/${name}`
+const fallbackVehicleImages = {
+  Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'),
+  Toyota: asset('toyota-alphard-studio.png'), 'Mercedes-Benz': asset('mercedes-e300-studio-v2.png'), 'Mercedes‑Benz': asset('mercedes-e300-studio-v2.png'), Lexus: asset('lexus-ls500h-studio-v2.png'),
+}
 const vehicleImageUrl = (path) => path?.startsWith('http') ? path : supabase.storage.from('vehicle-media').getPublicUrl(path || '').data.publicUrl
+const vehicleHeroImage = (vehicle) => vehicle.hero_image_url || fallbackVehicleImages[vehicle.brand] || ''
 
 export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const [vehicles, setVehicles] = useState([])
@@ -157,7 +164,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const publishedCount = vehicles.filter((vehicle) => vehicle.status === 'published').length
   const pendingCount = submissions.filter((item) => item.status === 'pending').length
   const editingGallery = photoSlots.map((slot) => photos[slot.key] ? { url: photos[slot.key].url, label: slot.label } : null).filter(Boolean)
-  const editablePhotos = editingGallery.length ? editingGallery : form.hero_image_url ? [{ url: form.hero_image_url, label: '車輛主圖' }] : []
+  const editablePhotos = editingGallery.length ? editingGallery : form.hero_image_url ? [{ url: form.hero_image_url, label: '車輛主圖' }] : editing ? [{ url: vehicleHeroImage(editing), label: '車輛主圖' }].filter((image) => image.url) : []
   const openPhotoViewer = (title, images, selected = 0) => setPhotoViewer({ title, images, selected })
 
   return <div className="admin-shell admin-live">
@@ -194,7 +201,8 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
           <div className="live-list-head"><div><span className="eyeline">公開庫存</span><h2>已上架車盤</h2></div><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
           {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => {
             const gallery = [...(vehicle.vehicle_images || [])].sort((a, b) => a.sort_order - b.sort_order).map((image, index) => ({ url: vehicleImageUrl(image.storage_path), label: image.alt_text || photoSlots[index]?.label || `相片 ${index + 1}` })).filter((image) => image.url)
-            const vehiclePhotos = gallery.length ? gallery : vehicle.hero_image_url ? [{ url: vehicle.hero_image_url, label: '車輛主圖' }] : []
+            const heroImage = vehicleHeroImage(vehicle)
+            const vehiclePhotos = gallery.length ? gallery : heroImage ? [{ url: heroImage, label: '車輛主圖' }] : []
             return <article className="live-vehicle" key={vehicle.id}>
             <div><b>{vehicle.brand} {vehicle.model}</b><small>{vehicle.year} · HK${Number(vehicle.price_hkd).toLocaleString('en-HK')} · {vehicle.status === 'published' ? '已上架' : vehicle.status === 'archived' ? '已下架' : '草稿'}</small></div>
             <div className="live-vehicle-actions">
