@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, ArrowUpRight, Bell, CarFront, Check, ChevronDown, ClipboardList,
   FileText, Grid2X2, Heart, List, Menu, MessageCircle, Phone, Plus, Search, Send,
@@ -10,6 +10,8 @@ import { useCustomerChat } from './useCustomerChat'
 
 const basePath = import.meta.env?.BASE_URL || '/drivematch-hk-demo/'
 const asset = (name) => `${basePath}assets/${name}`
+const adminIdleTimeoutMs = 30 * 60 * 1000
+const adminIdleKey = (userId) => `drivematch-admin-last-activity-${userId}`
 const fallbackImages = { Ferrari: asset('supercar-sf90.png'), Porsche: asset('porsche-911-carrera-studio-v2.png'), Tesla: asset('ev-sedan.png'), Toyota: asset('toyota-alphard-studio.png'), 'Mercedes-Benz': asset('mercedes-e300-studio-v2.png'), 'Mercedes‑Benz': asset('mercedes-e300-studio-v2.png'), Lexus: asset('lexus-ls500h-studio-v2.png') }
 const vehiclePhotoLabels = ['車頭', '車尾', '車身左側', '車身右側', '車內籠']
 const vehicleImageUrl = (path) => path?.startsWith('http') ? path : supabase.storage.from('vehicle-media').getPublicUrl(path || '').data.publicUrl
@@ -268,8 +270,17 @@ function App() {
   const [admin, setAdmin] = useState(null)
   const [authReady, setAuthReady] = useState(false)
   useEffect(() => { const sync = () => setScreen(window.location.hash === '#admin' ? 'admin' : window.location.hash === '#login' ? 'login' : 'buyer'); window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
-  const navigate = (next) => { if (next === 'admin' || next === 'login') window.location.hash = next; else { window.history.replaceState(null, '', window.location.pathname); setScreen(next) } }
-  const signOut = async () => { await supabase.auth.signOut(); setAdmin(null); navigate('buyer') }
+  const navigate = useCallback((next) => { if (next === 'admin' || next === 'login') window.location.hash = next; else { window.history.replaceState(null, '', window.location.pathname); setScreen(next) } }, [])
+  const completeAdminLogin = useCallback((identity) => {
+    localStorage.setItem(adminIdleKey(identity.user.id), String(Date.now()))
+    setAdmin(identity)
+  }, [])
+  const signOut = useCallback(async () => {
+    if (admin?.user?.id) localStorage.removeItem(adminIdleKey(admin.user.id))
+    await supabase.auth.signOut({ scope: 'local' })
+    setAdmin(null)
+    navigate('buyer')
+  }, [admin?.user?.id, navigate])
   useEffect(() => {
     let active = true
     let restoreVersion = 0
@@ -294,9 +305,51 @@ function App() {
     void supabase.auth.getSession().then(({ data }) => restoreAdmin(data.session))
     return () => { active = false; subscription.unsubscribe() }
   }, [])
+  useEffect(() => {
+    const userId = admin?.user?.id
+    if (!userId) return undefined
+    const storageKey = adminIdleKey(userId)
+    let timeoutId
+    let completed = false
+    const lastActivity = () => Number(localStorage.getItem(storageKey)) || 0
+    const endIdleSession = async () => {
+      if (completed) return
+      completed = true
+      localStorage.removeItem(storageKey)
+      await supabase.auth.signOut({ scope: 'local' })
+      setAdmin(null)
+      navigate('buyer')
+    }
+    const scheduleLogout = () => {
+      const storedTime = lastActivity()
+      const activeAt = storedTime || Date.now()
+      if (!storedTime) localStorage.setItem(storageKey, String(activeAt))
+      window.clearTimeout(timeoutId)
+      const remaining = adminIdleTimeoutMs - (Date.now() - activeAt)
+      timeoutId = window.setTimeout(() => { void endIdleSession() }, Math.max(0, remaining))
+    }
+    const recordBackendActivity = () => {
+      if (screen !== 'admin') return
+      localStorage.setItem(storageKey, String(Date.now()))
+      scheduleLogout()
+    }
+    const syncAcrossTabs = (event) => { if (event.key === storageKey) scheduleLogout() }
+    const rescheduleWhenVisible = () => { if (!document.hidden) scheduleLogout() }
+    const activityEvents = ['pointerdown', 'keydown', 'input', 'change', 'wheel', 'touchstart']
+    if (screen === 'admin') activityEvents.forEach((event) => window.addEventListener(event, recordBackendActivity, { passive: true }))
+    window.addEventListener('storage', syncAcrossTabs)
+    document.addEventListener('visibilitychange', rescheduleWhenVisible)
+    scheduleLogout()
+    return () => {
+      window.clearTimeout(timeoutId)
+      if (screen === 'admin') activityEvents.forEach((event) => window.removeEventListener(event, recordBackendActivity))
+      window.removeEventListener('storage', syncAcrossTabs)
+      document.removeEventListener('visibilitychange', rescheduleWhenVisible)
+    }
+  }, [admin?.user?.id, navigate, screen])
   if (!authReady) return <div className="site-shell" role="status" aria-live="polite"/>
-  if (screen === 'admin') return admin ? <AdminDashboard onReturnFrontend={() => navigate('buyer')} onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
-  if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={setAdmin}/>
+  if (screen === 'admin') return admin ? <AdminDashboard onReturnFrontend={() => navigate('buyer')} onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={completeAdminLogin}/>
+  if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={completeAdminLogin}/>
   return screen === 'seller' ? <SellerPageRequiredPhotos onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
 }
 
