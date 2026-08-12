@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ensureVisitorSession, supabase } from './lib/supabase'
 
-const storageKey = (visitorId) => `apex-chat-conversation:${visitorId}`
+const storageKey = (visitorId) => `alphamotor-chat-conversation:${visitorId}`
 
 const toDisplayMessage = (message, visitorId) => ({
   id: message.id,
@@ -34,7 +34,7 @@ export function useCustomerChat({ enabled, subject }) {
       try {
         // Earlier preview builds stored simulated replies under this key.
         // Remove it once so only database-backed messages can be displayed.
-        localStorage.removeItem('apex-chat')
+        localStorage.removeItem('alphamotor-chat')
         const session = await ensureVisitorSession()
         if (!active || !session?.user) return
         const id = session.user.id

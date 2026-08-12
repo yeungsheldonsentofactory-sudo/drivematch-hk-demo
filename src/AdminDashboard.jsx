@@ -170,7 +170,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
 
   return <div className="admin-shell admin-live">
     <aside className="admin-sidebar">
-      <div className="admin-logo">APEX<small>MOTOR GALLERY · HONG KONG</small></div>
+      <div className="admin-logo">ALPHA<small>MOTOR GALLERY · HONG KONG</small></div>
       <nav>
         <button className={page === 'submissions' ? 'active' : ''} onClick={() => setPage('submissions')}><Check size={20}/>客戶提交 <b>{pendingCount}</b></button>
         <button className={page === 'vehicles' ? 'active' : ''} onClick={() => setPage('vehicles')}><Archive size={20}/>已上架車盤 <b>{publishedCount}</b></button>
