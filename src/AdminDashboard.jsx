@@ -24,7 +24,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
   const [photos, setPhotos] = useState({})
-  const [submissionPreview, setSubmissionPreview] = useState(null)
+  const [photoViewer, setPhotoViewer] = useState(null)
   const [page, setPage] = useState('submissions')
 
   const load = async () => {
@@ -156,6 +156,9 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const pageTitle = { submissions: '客戶提交車輛', vehicles: '已上架車盤', upload: '內部上架系統', chat: '客戶客服對話' }[page]
   const publishedCount = vehicles.filter((vehicle) => vehicle.status === 'published').length
   const pendingCount = submissions.filter((item) => item.status === 'pending').length
+  const editingGallery = photoSlots.map((slot) => photos[slot.key] ? { url: photos[slot.key].url, label: slot.label } : null).filter(Boolean)
+  const editablePhotos = editingGallery.length ? editingGallery : form.hero_image_url ? [{ url: form.hero_image_url, label: '車輛主圖' }] : []
+  const openPhotoViewer = (title, images, selected = 0) => setPhotoViewer({ title, images, selected })
 
   return <div className="admin-shell admin-live">
     <aside className="admin-sidebar">
@@ -178,31 +181,37 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
             <b>{item.car_name}</b>
             <small>{item.year} · {item.mileage_km.toLocaleString()} 公里 · {item.contact_name}</small>
             <small>已附相片：{item.image_paths?.length || 0} / 5 張</small>
-            {item.signed_images.length > 0 ? <div className="submission-photo-strip" aria-label={`${item.car_name} 車況相片`}>
-              {item.signed_images.map((image) => <button type="button" key={image.path} onClick={() => setSubmissionPreview({ ...image, carName: item.car_name })}>
+            {item.signed_images.length > 0 ? <><div className="submission-photo-strip" aria-label={`${item.car_name} 車況相片`}>
+              {item.signed_images.map((image, index) => <button type="button" key={image.path} onClick={() => openPhotoViewer(item.car_name, item.signed_images, index)}>
                 <img src={image.url} alt={`${item.car_name}：${image.label}`}/><span>{image.label}</span>
               </button>)}
-            </div> : (item.image_paths?.length || 0) > 0 ? <small className="submission-photo-warning">相片暫時未能載入，請按頁面重新整理重試。</small> : <small className="submission-photo-empty">此示範提交未附有客戶相片。</small>}
+            </div><button type="button" className="view-photo-action" onClick={() => openPhotoViewer(item.car_name, item.signed_images)}>查看全部 {item.signed_images.length} 張車況相片</button></> : (item.image_paths?.length || 0) > 0 ? <small className="submission-photo-warning">相片暫時未能載入，請按頁面重新整理重試。</small> : <small className="submission-photo-empty">此示範提交未附有客戶相片。</small>}
             <small>狀態：{item.status}</small>
             {item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}
           </article>)}
         </section>}
         {page === 'vehicles' && <section className="live-list admin-section">
           <div className="live-list-head"><div><span className="eyeline">公開庫存</span><h2>已上架車盤</h2></div><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
-          {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => <article className="live-vehicle" key={vehicle.id}>
+          {vehicles.length === 0 ? <p className="live-empty">尚未有車盤。</p> : vehicles.map((vehicle) => {
+            const gallery = [...(vehicle.vehicle_images || [])].sort((a, b) => a.sort_order - b.sort_order).map((image, index) => ({ url: vehicleImageUrl(image.storage_path), label: image.alt_text || photoSlots[index]?.label || `相片 ${index + 1}` })).filter((image) => image.url)
+            const vehiclePhotos = gallery.length ? gallery : vehicle.hero_image_url ? [{ url: vehicle.hero_image_url, label: '車輛主圖' }] : []
+            return <article className="live-vehicle" key={vehicle.id}>
             <div><b>{vehicle.brand} {vehicle.model}</b><small>{vehicle.year} · HK${Number(vehicle.price_hkd).toLocaleString('en-HK')} · {vehicle.status === 'published' ? '已上架' : vehicle.status === 'archived' ? '已下架' : '草稿'}</small></div>
             <div className="live-vehicle-actions">
+              {vehiclePhotos.length > 0 && <button className="view-action" onClick={() => openPhotoViewer(`${vehicle.brand} ${vehicle.model}`, vehiclePhotos)} disabled={Boolean(busyId)}>查看相片</button>}
               <button className="edit-action" onClick={() => startEdit(vehicle)} disabled={Boolean(busyId)}><Pencil size={15}/>修改</button>
               {vehicle.status === 'published' && <button className="archive-action" onClick={() => archive(vehicle)} disabled={Boolean(busyId)}><Archive size={15}/>下架</button>}
               <button className="delete-action" onClick={() => remove(vehicle)} disabled={Boolean(busyId)}><Trash2 size={15}/>刪除</button>
             </div>
-          </article>)}
+          </article>
+          })}
         </section>}
         {page === 'upload' && <section className="live-editor admin-section">
           <span className="eyeline">{editing ? '修改車盤' : '新增車盤'}</span>
           <h2>{editing ? `${editing.brand} ${editing.model}` : '建立新現貨車盤'}</h2>
           <p>{editing ? '儲存後會即時更新資料庫；若目前已上架，前台重新整理便會看到改動。' : '設定為「立即上架」後，會在公開車盤頁出現。'}</p>
           <form onSubmit={save} className="live-form">
+            {editing && <section className="editing-photo-review full"><div><span>現有車況相片</span><p>{editingGallery.length ? `已儲存 ${editingGallery.length} 張相片。` : editablePhotos.length ? '這個舊車盤目前只有主圖；請在下方補上 5 張指定角度相片。' : '暫未有相片，請在下方補上 5 張指定角度相片。'}</p></div>{editablePhotos.length > 0 && <button type="button" onClick={() => openPhotoViewer(`${editing.brand} ${editing.model}`, editablePhotos)}>檢視相片</button>}</section>}
             <label>車廠<input required value={form.brand} onChange={(event) => change('brand', event.target.value)}/></label>
             <label>型號<input required value={form.model} onChange={(event) => change('model', event.target.value)}/></label>
             <label>車種<select value={form.vehicle_type} onChange={(event) => change('vehicle_type', event.target.value)}>{vehicleTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -218,7 +227,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
             <label>驗車<select value={form.inspection_status} onChange={(event) => change('inspection_status', event.target.value)}><option value="pending">待驗證</option><option value="verified">已驗證</option><option value="not_available">未提供</option></select></label>
             <label>狀態<select value={form.status} onChange={(event) => change('status', event.target.value)}><option value="draft">草稿</option><option value="published">立即上架</option><option value="sold">已售</option><option value="archived">下架</option></select></label>
             <label className="full">車輛主圖網址<input type="url" placeholder="https://…" value={form.hero_image_url} onChange={(event) => change('hero_image_url', event.target.value)}/></label>
-            <fieldset className="admin-photo-set full"><legend>車輛相簿（5 張指定角度）</legend><p>前台詳情頁會以這 5 張實拍相片顯示可切換相簿。</p><div>{photoSlots.map((slot) => <label key={slot.key}><span>{slot.label}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(slot, event.target.files?.[0]); event.target.value = '' }}/>{photos[slot.key]?.url && <img src={photos[slot.key].url} alt={`${slot.label}預覽`}/>}</label>)}</div></fieldset>
+            <fieldset className="admin-photo-set full"><legend>車輛相簿（5 張指定角度）</legend><p>前台詳情頁會以這 5 張實拍相片顯示可切換相簿。</p><div>{photoSlots.map((slot) => <div className="admin-photo-slot" key={slot.key}><label><span>{slot.label}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(slot, event.target.files?.[0]); event.target.value = '' }}/>{photos[slot.key]?.url && <img src={photos[slot.key].url} alt={`${slot.label}預覽`}/>}</label>{photos[slot.key]?.url && <button type="button" onClick={() => openPhotoViewer(`${editing?.brand || form.brand} ${editing?.model || form.model}`.trim(), editingGallery, editingGallery.findIndex((image) => image.label === slot.label))}>放大查看</button>}</div>)}</div></fieldset>
             <label className="full">車盤亮點<input value={form.highlight} onChange={(event) => change('highlight', event.target.value)}/></label>
             <div className="editor-actions"><button className="dark-button" disabled={Boolean(busyId)}>{busyId === 'save' ? '儲存中…' : <><Check size={17}/>{editing ? '儲存修改' : '建立車盤'}</>}</button>{editing && <button className="cancel-edit" type="button" onClick={startNew} disabled={Boolean(busyId)}>取消修改</button>}</div>
           </form>
@@ -226,11 +235,12 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
         {page === 'chat' && <section className="admin-chat-page"><AdminChatDesk/></section>}
       </div>
     </main>
-    {submissionPreview && <div className="submission-preview-backdrop" role="presentation" onMouseDown={() => setSubmissionPreview(null)}>
-      <section className="submission-preview-dialog" role="dialog" aria-modal="true" aria-label={`${submissionPreview.carName} ${submissionPreview.label}`} onMouseDown={(event) => event.stopPropagation()}>
-        <button type="button" className="submission-preview-close" aria-label="關閉相片預覽" onClick={() => setSubmissionPreview(null)}><X size={21}/></button>
-        <img src={submissionPreview.url} alt={`${submissionPreview.carName}：${submissionPreview.label}`}/>
-        <p>{submissionPreview.carName} · {submissionPreview.label}</p>
+    {photoViewer && <div className="submission-preview-backdrop" role="presentation" onMouseDown={() => setPhotoViewer(null)}>
+      <section className="submission-preview-dialog" role="dialog" aria-modal="true" aria-label={`${photoViewer.title} 相片預覽`} onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" className="submission-preview-close" aria-label="關閉相片預覽" onClick={() => setPhotoViewer(null)}><X size={21}/></button>
+        <img src={photoViewer.images[photoViewer.selected].url} alt={`${photoViewer.title}：${photoViewer.images[photoViewer.selected].label}`}/>
+        <div className="photo-viewer-thumbnails">{photoViewer.images.map((image, index) => <button type="button" key={`${image.url}-${index}`} className={index === photoViewer.selected ? 'active' : ''} onClick={() => setPhotoViewer((current) => ({ ...current, selected: index }))}><img src={image.url} alt={image.label}/><span>{image.label}</span></button>)}</div>
+        <p>{photoViewer.title} · {photoViewer.images[photoViewer.selected].label}</p>
       </section>
     </div>}
   </div>
