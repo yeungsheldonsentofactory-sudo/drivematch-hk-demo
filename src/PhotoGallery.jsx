@@ -28,7 +28,7 @@ export default function PhotoGallery({ images = [], title = '車輛相片', init
         <button type="button" className="photo-gallery-arrow previous" onClick={selectPrevious} aria-label="查看上一張相片"><ChevronLeft size={23}/></button>
         <button type="button" className="photo-gallery-arrow next" onClick={selectNext} aria-label="查看下一張相片"><ChevronRight size={23}/></button>
       </>}
-      <span className="photo-gallery-count" aria-live="polite">第 {selectedIndex + 1} / {gallery.length} 張</span>
+      <span className="photo-gallery-count" aria-live="polite">{selectedIndex + 1}/{gallery.length}</span>
     </div>
     <div className="photo-gallery-thumbnails" aria-label={`${title}，共 ${gallery.length} 張相片`}>
       {gallery.map((photo, index) => {
@@ -36,7 +36,7 @@ export default function PhotoGallery({ images = [], title = '車輛相片', init
         const active = selectedIndex === index
         return <button key={`${photo.url}-${index}`} type="button" className={active ? 'active' : ''} onClick={() => setSelectedIndex(index)} aria-label={`查看第 ${index + 1} 張：${label}`} aria-pressed={active}>
           <img src={photo.url} alt=""/>
-          <span>第 {index + 1} 張 · {label}</span>
+          <span>{index + 1}/{gallery.length}</span>
         </button>
       })}
     </div>
