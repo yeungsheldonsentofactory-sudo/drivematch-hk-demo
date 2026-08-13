@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Archive, ArrowLeft, Check, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminChatDesk from './AdminChatDesk'
+import PhotoGallery from './PhotoGallery'
 
 const blank = {
   brand: '', model: '', vehicle_type: '高級家庭車', year: '', price_hkd: '', mileage_km: '', owner_count: '',
@@ -247,9 +248,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
     {photoViewer && <div className="submission-preview-backdrop" role="presentation" onMouseDown={() => setPhotoViewer(null)}>
       <section className="submission-preview-dialog" role="dialog" aria-modal="true" aria-label={`${photoViewer.title} 相片預覽`} onMouseDown={(event) => event.stopPropagation()}>
         <button type="button" className="submission-preview-close" aria-label="關閉相片預覽" onClick={() => setPhotoViewer(null)}><X size={21}/></button>
-        <img src={photoViewer.images[photoViewer.selected].url} alt={`${photoViewer.title}：${photoViewer.images[photoViewer.selected].label}`}/>
-        <div className="photo-viewer-thumbnails">{photoViewer.images.map((image, index) => <button type="button" key={`${image.url}-${index}`} className={index === photoViewer.selected ? 'active' : ''} onClick={() => setPhotoViewer((current) => ({ ...current, selected: index }))}><img src={image.url} alt={image.label}/><span>{image.label}</span></button>)}</div>
-        <p>{photoViewer.title} · {photoViewer.images[photoViewer.selected].label}</p>
+        <PhotoGallery className="admin-photo-viewer-gallery" images={photoViewer.images} title={`${photoViewer.title} 車況相片`} initialIndex={photoViewer.selected} resetKey={`${photoViewer.title}-${photoViewer.selected}`}/>
       </section>
     </div>}
   </div>
