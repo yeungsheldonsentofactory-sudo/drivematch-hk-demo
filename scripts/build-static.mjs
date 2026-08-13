@@ -25,9 +25,15 @@ await writeFile(new URL('../dist/index.html', import.meta.url), `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#13263e" />
-    <meta name="description" content="ALPHA Motor Gallery 香港精選現貨汽車買賣展示平台。" />
+    <meta name="description" content="ALPHA Motor Gallery 香港精選現貨汽車買賣平台，提供透明車況資料、專業車輛相簿及預約睇車服務。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="ALPHA Motor Gallery · 精選現貨汽車" />
+    <meta property="og:description" content="香港精選現貨車盤，透明車況資料、預約睇車及專人跟進。" />
+    <meta property="og:locale" content="zh_HK" />
+    <meta name="twitter:card" content="summary_large_image" />
     <title>ALPHA Motor Gallery · 精選現貨汽車</title>
     <link rel="stylesheet" href="assets/${stylesheet}" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"AutoDealer","name":"ALPHA Motor Gallery","description":"香港精選現貨汽車買賣平台","areaServed":"Hong Kong","url":"https://alphamotor.pages.dev/"}</script>
   </head>
   <body>
     <div id="root"></div>

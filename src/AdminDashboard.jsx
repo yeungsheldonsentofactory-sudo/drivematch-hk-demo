@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Archive, ArrowLeft, Check, MessageCircle, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Archive, ArrowLeft, CalendarDays, Check, MessageCircle, Pencil, Phone, Plus, Send, Trash2, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminChatDesk from './AdminChatDesk'
 import PhotoGallery from './PhotoGallery'
 
 const blank = {
-  brand: '', model: '', vehicle_type: '高級家庭車', year: '', price_hkd: '', mileage_km: '', owner_count: '',
+  brand: '', model: '', vehicle_type: '高級家庭車', year: '', first_registration_year: '', price_hkd: '', mileage_km: '', owner_count: '',
   import_type: '行貨', color: '', highlight: '', hero_image_url: '', plate_fee_hkd: '0', transfer_fee_hkd: '0',
-  warranty_months: '0', inspection_status: 'pending', status: 'draft',
+  warranty_months: '0', inspection_status: 'pending', status: 'draft', options: '', history: '', internal_tags: '', video_url: '',
 }
-const numeric = ['year', 'price_hkd', 'mileage_km', 'owner_count', 'plate_fee_hkd', 'transfer_fee_hkd', 'warranty_months']
+const numeric = ['year', 'first_registration_year', 'price_hkd', 'mileage_km', 'owner_count', 'plate_fee_hkd', 'transfer_fee_hkd', 'warranty_months']
 const vehicleTypes = ['超級跑車', '跑車', '電動車', '七人商務車', '高級家庭車', '高級日本車']
 const photoSlots = [
   { key: 'front', label: '車頭' }, { key: 'rear', label: '車尾' }, { key: 'left', label: '車身左側' },
@@ -27,6 +27,8 @@ const vehicleHeroImage = (vehicle) => vehicle.hero_image_url || fallbackVehicleI
 export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const [vehicles, setVehicles] = useState([])
   const [submissions, setSubmissions] = useState([])
+  const [leads, setLeads] = useState([])
+  const [leadDrafts, setLeadDrafts] = useState({})
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState('')
@@ -36,9 +38,10 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const [page, setPage] = useState('submissions')
 
   const load = async () => {
-    const [vehicleResult, submissionResult] = await Promise.all([
+    const [vehicleResult, submissionResult, leadResult] = await Promise.all([
       supabase.from('vehicles').select('*, vehicle_images(id, storage_path, alt_text, sort_order)').order('created_at', { ascending: false }),
       supabase.from('seller_submissions').select('*').order('created_at', { ascending: false }),
+      supabase.from('viewing_appointments').select('*, vehicles(brand, model, year, price_hkd)').order('created_at', { ascending: false }),
     ])
     if (vehicleResult.error) setNotice(`未能讀取車盤：${vehicleResult.error.message}`)
     else setVehicles(vehicleResult.data || [])
@@ -63,6 +66,8 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
         })).filter((image) => image.url),
       })))
     }
+    if (leadResult.error) setNotice(`未能讀取客戶線索：${leadResult.error.message}`)
+    else setLeads(leadResult.data || [])
   }
 
   useEffect(() => { load() }, [])
@@ -71,7 +76,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
   const startNew = () => { setEditing(null); setForm(blank); setPhotos({}); setNotice(''); setPage('upload') }
   const startEdit = (vehicle) => {
     setEditing(vehicle)
-    setForm(Object.fromEntries(Object.entries(blank).map(([key, fallback]) => [key, vehicle[key] ?? fallback])))
+    setForm(Object.fromEntries(Object.entries(blank).map(([key, fallback]) => [key, key === 'internal_tags' ? (vehicle.internal_tags || []).join('、') : vehicle[key] ?? fallback])))
     setPhotos(Object.fromEntries([...(vehicle.vehicle_images || [])].sort((a, b) => a.sort_order - b.sort_order).slice(0, 5).map((image, index) => [photoSlots[index].key, { storagePath: image.storage_path, url: vehicleImageUrl(image.storage_path), alt: image.alt_text || photoSlots[index].label }])))
     setNotice(`正在修改：${vehicle.brand} ${vehicle.model}`)
     setPage('upload')
@@ -95,7 +100,8 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
       return
     }
     setBusyId('save')
-    const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, numeric.includes(key) ? Number(value) : value]))
+    const payload = Object.fromEntries(Object.entries(form).map(([key, value]) => [key, numeric.includes(key) ? (value === '' ? null : Number(value)) : value]))
+    payload.internal_tags = String(form.internal_tags || '').split(/[、,]/).map((item) => item.trim()).filter(Boolean)
     payload.published_at = payload.status === 'published' ? editing?.published_at || new Date().toISOString() : null
     const result = editing
       ? await supabase.from('vehicles').update(payload).eq('id', editing.id).select('id').single()
@@ -141,6 +147,30 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
     setBusyId('')
   }
 
+  const updateLeadDraft = (id, values) => setLeadDrafts((current) => ({ ...current, [id]: { ...(current[id] || {}), ...values } }))
+  const saveLead = async (lead) => {
+    const draft = leadDrafts[lead.id] || {}
+    const status = draft.status || lead.status
+    setBusyId(`lead-${lead.id}`)
+    const payload = {
+      status,
+      internal_notes: draft.internal_notes ?? lead.internal_notes ?? '',
+      next_follow_up_at: draft.next_follow_up_at ? new Date(draft.next_follow_up_at).toISOString() : lead.next_follow_up_at,
+      updated_at: new Date().toISOString(),
+    }
+    if (status === 'contacted' && lead.status !== 'contacted') payload.last_contacted_at = new Date().toISOString()
+    const { error } = await supabase.from('viewing_appointments').update(payload).eq('id', lead.id)
+    setNotice(error ? `線索更新失敗：${error.message}` : '線索跟進資料已儲存。')
+    if (!error) { setLeadDrafts((current) => ({ ...current, [lead.id]: {} })); await load() }
+    setBusyId('')
+  }
+  const leadWhatsapp = (lead) => {
+    const number = String(lead.phone || '').replace(/\D/g, '')
+    if (!number) return
+    const vehicleName = lead.vehicles ? `${lead.vehicles.brand} ${lead.vehicles.model}` : '你的查詢'
+    window.open(`https://wa.me/852${number.length === 8 ? number : number.replace(/^852/, '')}?text=${encodeURIComponent(`你好，這裡是 ALPHA Motor Gallery，現正跟進你關於 ${vehicleName} 的查詢。`)}`, '_blank', 'noopener,noreferrer')
+  }
+
   const archive = async (vehicle) => {
     if (!window.confirm(`確定下架「${vehicle.brand} ${vehicle.model}」？\n下架後不會在前台顯示，但資料會保留。`)) return
     setBusyId(`archive-${vehicle.id}`)
@@ -162,9 +192,10 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
     setBusyId('')
   }
 
-  const pageTitle = { submissions: '客戶提交車輛', vehicles: '已上架車盤', upload: '內部上架系統', chat: '客戶客服對話' }[page]
+  const pageTitle = { submissions: '客戶提交車輛', leads: '買家線索中心', vehicles: '已上架車盤', upload: '內部上架系統', chat: '客戶客服對話' }[page]
   const publishedCount = vehicles.filter((vehicle) => vehicle.status === 'published').length
   const pendingCount = submissions.filter((item) => item.status === 'pending').length
+  const openLeadCount = leads.filter((item) => ['new', 'contacted', 'scheduled', 'quoted', 'pending', 'confirmed'].includes(item.status)).length
   const editingGallery = photoSlots.map((slot) => photos[slot.key] ? { url: photos[slot.key].url, label: slot.label } : null).filter(Boolean)
   const editablePhotos = editingGallery.length ? editingGallery : form.hero_image_url ? [{ url: form.hero_image_url, label: '車輛主圖' }] : editing ? [{ url: vehicleHeroImage(editing), label: '車輛主圖' }].filter((image) => image.url) : []
   const openPhotoViewer = (title, images, selected = 0) => setPhotoViewer({ title, images, selected })
@@ -174,6 +205,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
       <div className="admin-logo">ALPHA<small>MOTOR GALLERY · HONG KONG</small></div>
       <nav>
         <button className={page === 'submissions' ? 'active' : ''} onClick={() => setPage('submissions')}><Check size={20}/>客戶提交 <b>{pendingCount}</b></button>
+        <button className={page === 'leads' ? 'active' : ''} onClick={() => setPage('leads')}><CalendarDays size={20}/>買家線索 <b>{openLeadCount}</b></button>
         <button className={page === 'vehicles' ? 'active' : ''} onClick={() => setPage('vehicles')}><Archive size={20}/>已上架車盤 <b>{publishedCount}</b></button>
         <button className={page === 'upload' ? 'active' : ''} onClick={startNew}><Plus size={20}/>內部上架</button>
         <button className={page === 'chat' ? 'active' : ''} onClick={() => setPage('chat')}><MessageCircle size={20}/>客服對話</button>
@@ -198,6 +230,24 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
             <small>狀態：{item.status}</small>
             {item.status === 'pending' && <div><button disabled={Boolean(busyId)} onClick={() => review(item.id, 'rejected')}>拒絕</button><button disabled={Boolean(busyId)} className="approve" onClick={() => review(item.id, 'accepted')}>採用</button></div>}
           </article>)}
+        </section>}
+        {page === 'leads' && <section className="live-list admin-section lead-desk">
+          <div className="live-list-head"><div><span className="eyeline">銷售跟進</span><h2>買家線索中心</h2></div><b>{openLeadCount} 進行中</b></div>
+          <p className="lead-desk-intro">來自車盤詳情頁的預約睇車、融資及 Trade-in 查詢。客戶資料只供已登入的團隊成員跟進。</p>
+          {leads.length === 0 ? <p className="live-empty">暫未收到買家查詢。</p> : leads.map((lead) => {
+            const draft = leadDrafts[lead.id] || {}
+            const status = draft.status || lead.status
+            const vehicleName = lead.vehicles ? `${lead.vehicles.brand} ${lead.vehicles.model}` : '已下架車盤'
+            const leadType = { viewing: '預約睇車', finance: '融資查詢', trade_in: 'Trade-in', general: '一般查詢' }[lead.lead_type] || '車盤查詢'
+            return <article className="admin-lead-card" key={lead.id}>
+              <header><div><span className="lead-kind">{leadType}</span><h3>{vehicleName}</h3><small>提交於 {new Intl.DateTimeFormat('zh-HK', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lead.created_at))}</small></div><select value={status} onChange={(event) => updateLeadDraft(lead.id, { status: event.target.value })} aria-label={`${vehicleName} 跟進狀態`}><option value="new">新查詢</option><option value="contacted">已聯絡</option><option value="scheduled">已約時間</option><option value="quoted">已報價</option><option value="won">已成交</option><option value="lost">未成交</option><option value="cancelled">已取消</option></select></header>
+              <div className="lead-contact"><b>{lead.customer_name}</b><a href={`tel:${lead.phone}`}>{lead.phone}</a>{lead.email && <a href={`mailto:${lead.email}`}>{lead.email}</a>}</div>
+              {lead.preferred_at && <p className="lead-preferred"><CalendarDays size={15}/>客戶理想時間：{new Intl.DateTimeFormat('zh-HK', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lead.preferred_at))}</p>}
+              {lead.note && <p className="lead-message">{lead.note}</p>}
+              <label className="lead-note-label">內部跟進備註<textarea value={draft.internal_notes ?? lead.internal_notes ?? ''} onChange={(event) => updateLeadDraft(lead.id, { internal_notes: event.target.value })} placeholder="例如：已約週六下午睇車、待銀行回覆…"/></label>
+              <div className="lead-followup"><label>下次跟進時間<input type="datetime-local" value={draft.next_follow_up_at ?? (lead.next_follow_up_at ? new Date(lead.next_follow_up_at).toISOString().slice(0, 16) : '')} onChange={(event) => updateLeadDraft(lead.id, { next_follow_up_at: event.target.value })}/></label><button type="button" className="lead-whatsapp" onClick={() => leadWhatsapp(lead)}><Phone size={15}/>WhatsApp</button><button type="button" className="lead-save" disabled={Boolean(busyId)} onClick={() => saveLead(lead)}>{busyId === `lead-${lead.id}` ? '儲存中…' : <><Check size={15}/>儲存跟進</>}</button></div>
+            </article>
+          })}
         </section>}
         {page === 'vehicles' && <section className="live-list admin-section">
           <div className="live-list-head"><div><span className="eyeline">公開庫存</span><h2>已上架車盤</h2></div><button className="dark-button" onClick={startNew}><Plus size={16}/>新增車盤</button></div>
@@ -226,6 +276,7 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
             <label>型號<input required value={form.model} onChange={(event) => change('model', event.target.value)}/></label>
             <label>車種<select value={form.vehicle_type} onChange={(event) => change('vehicle_type', event.target.value)}>{vehicleTypes.map((item) => <option key={item}>{item}</option>)}</select></label>
             <label>出廠年份<input required min="1900" max="2100" type="number" value={form.year} onChange={(event) => change('year', event.target.value)}/></label>
+            <label>香港首次登記年份<input min="1900" max="2100" type="number" value={form.first_registration_year} onChange={(event) => change('first_registration_year', event.target.value)}/></label>
             <label>售價（HK$）<input required min="0" type="number" value={form.price_hkd} onChange={(event) => change('price_hkd', event.target.value)}/></label>
             <label>里數（公里）<input required min="0" type="number" value={form.mileage_km} onChange={(event) => change('mileage_km', event.target.value)}/></label>
             <label>車主數目<input required min="0" type="number" value={form.owner_count} onChange={(event) => change('owner_count', event.target.value)}/></label>
@@ -239,6 +290,10 @@ export default function AdminDashboard({ onReturnFrontend, onSignOut }) {
             <label className="full">車輛主圖網址<input type="url" placeholder="https://…" value={form.hero_image_url} onChange={(event) => change('hero_image_url', event.target.value)}/></label>
             <fieldset className="admin-photo-set full"><legend>車輛相簿（5 張指定角度）</legend><p>前台詳情頁會以這 5 張實拍相片顯示可切換相簿。</p><div>{photoSlots.map((slot) => <div className="admin-photo-slot" key={slot.key}><label><span>{slot.label}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { setPhoto(slot, event.target.files?.[0]); event.target.value = '' }}/>{photos[slot.key]?.url && <img src={photos[slot.key].url} alt={`${slot.label}預覽`}/>}</label>{photos[slot.key]?.url && <button type="button" onClick={() => openPhotoViewer(`${editing?.brand || form.brand} ${editing?.model || form.model}`.trim(), editingGallery, editingGallery.findIndex((image) => image.label === slot.label))}>放大查看</button>}</div>)}</div></fieldset>
             <label className="full">車盤亮點<input value={form.highlight} onChange={(event) => change('highlight', event.target.value)}/></label>
+            <label className="full">主要選配<textarea value={form.options} onChange={(event) => change('options', event.target.value)} placeholder="例如：碳纖維套件、全景天窗、360° 鏡頭"/></label>
+            <label className="full">事故及維修紀錄<textarea value={form.history} onChange={(event) => change('history', event.target.value)} placeholder="公開給客戶查看的透明車況資料"/></label>
+            <label className="full">內部備註分類<input value={form.internal_tags} onChange={(event) => change('internal_tags', event.target.value)} placeholder="以逗號分隔，例如：寄賣車、需要留牌"/></label>
+            <label className="full">驗車／Walkaround 影片網址<input type="url" placeholder="https://…" value={form.video_url} onChange={(event) => change('video_url', event.target.value)}/></label>
             <div className="editor-actions"><button className="dark-button" disabled={Boolean(busyId)}>{busyId === 'save' ? '儲存中…' : <><Check size={17}/>{editing ? '儲存修改' : '建立車盤'}</>}</button>{editing && <button className="cancel-edit" type="button" onClick={startNew} disabled={Boolean(busyId)}>取消修改</button>}</div>
           </form>
         </section>}

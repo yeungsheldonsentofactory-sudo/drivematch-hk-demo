@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import AdminDashboard from './AdminDashboard'
-import PhotoGallery from './PhotoGallery'
+import VehicleDetailDialog from './VehicleDetailDialog'
 import { useCustomerChat } from './useCustomerChat'
 
 const basePath = import.meta.env?.BASE_URL || './'
@@ -58,13 +58,16 @@ function Header({ screen, onScreen }) {
 }
 
 function BuyerHome({ onScreen }) {
-  const [liveCars, setLiveCars] = useState([])
+  const [liveCars, setLiveCars] = useState(cars)
+  const [inventoryError, setInventoryError] = useState('')
   const [query, setQuery] = useState('')
   const [selectedBrand, setSelectedBrand] = useState('')
   const [selectedTypes, setSelectedTypes] = useState([])
   const [sort, setSort] = useState('random')
   const [viewMode, setViewMode] = useState('grid')
-  const [saved, setSaved] = useState([])
+  const [saved, setSaved] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('alphamotor-saved-vehicles') || '[]') } catch { return [] }
+  })
   const [filterOpen, setFilterOpen] = useState(false)
   const [activeCar, setActiveCar] = useState(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -78,7 +81,28 @@ function BuyerHome({ onScreen }) {
     const rules = { low: (a, b) => a.price - b.price, high: (a, b) => b.price - a.price, new: (a, b) => a.added - b.added, old: (a, b) => b.added - a.added, year: (a, b) => b.year - a.year, mileage: (a, b) => a.mileage - b.mileage, owners: (a, b) => a.owners - b.owners }
     return sort === 'random' ? result : result.sort(rules[sort])
   }, [liveCars, query, selectedBrand, selectedTypes, sort])
-  useEffect(() => { let active = true; supabase.from('vehicles').select('*, vehicle_images(id, storage_path, alt_text, sort_order)').eq('status', 'published').order('published_at', { ascending: false }).then(({ data, error }) => { if (!active || error) return; setLiveCars((data || []).map((car) => { const image = car.hero_image_url || fallbackImages[car.brand] || asset('ev-sedan.png'); return { id: car.id, brand: car.brand, model: car.model, type: car.vehicle_type, year: car.year, price: car.price_hkd, mileage: car.mileage_km, owners: car.owner_count, added: 0, highlight: car.highlight || '已由 ALPHA Motor Gallery 團隊核實', image, gallery: galleryForVehicle(image, car.vehicle_images) } })) }); return () => { active = false } }, [])
+  const loadInventory = useCallback(async () => {
+    const { data, error } = await supabase.from('vehicles').select('*, vehicle_images(id, storage_path, alt_text, sort_order)').eq('status', 'published').order('published_at', { ascending: false })
+    if (error) { setInventoryError('即時車盤暫時未能更新，正顯示已儲存的預覽資料。'); return }
+    setInventoryError('')
+    setLiveCars((data || []).map((car) => {
+      const image = car.hero_image_url || fallbackImages[car.brand] || asset('ev-sedan.png')
+      return {
+        id: car.id, brand: car.brand, model: car.model, type: car.vehicle_type, year: car.year, price: car.price_hkd,
+        mileage: car.mileage_km, owners: car.owner_count, added: 0, highlight: car.highlight || '已由 ALPHA Motor Gallery 團隊核實', image,
+        gallery: galleryForVehicle(image, car.vehicle_images), firstRegistrationYear: car.first_registration_year, importType: car.import_type,
+        options: car.options, history: car.history, inspectionStatus: car.inspection_status, warrantyMonths: car.warranty_months,
+      }
+    }))
+  }, [])
+  useEffect(() => { void loadInventory() }, [loadInventory])
+  useEffect(() => { localStorage.setItem('alphamotor-saved-vehicles', JSON.stringify(saved)) }, [saved])
+  useEffect(() => {
+    const sharedCarId = new URLSearchParams(window.location.search).get('car')
+    if (!sharedCarId) return
+    const sharedCar = liveCars.find((car) => String(car.id) === sharedCarId)
+    if (sharedCar) setActiveCar(sharedCar)
+  }, [liveCars])
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === 'Escape') { setActiveCar(null); setFilterOpen(false) } }
     window.addEventListener('keydown', closeOnEscape)
@@ -87,21 +111,28 @@ function BuyerHome({ onScreen }) {
   const selectSuggestion = (item) => { setSelectedBrand(item.brand); setQuery(item.model === 'SF90 Spider' ? 'SF90' : item.model) }
   const clearFilters = () => { setSelectedBrand(''); setSelectedTypes([]); setQuery('') }
   const toggleType = (type) => setSelectedTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type])
+  const openVehicle = (car) => {
+    setActiveCar(car)
+    const url = new URL(window.location.href)
+    url.searchParams.set('car', car.id)
+    window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }
+  const closeVehicle = () => {
+    setActiveCar(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('car')
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+  }
   return <div className="site-shell"><Header screen="buyer" onScreen={onScreen}/><main id="main-content" className="buyer-main">
     <section className="search-stage" aria-labelledby="buyer-title"><span className="eyeline search-eyeline"><Sparkles size={14}/>精選現貨 · 香港</span><h1 id="buyer-title">每架現貨，都值得親身細看。</h1><p>從超級跑車到七人商務車，精選現貨即時更新。</p><div className="intelligent-search"><Search size={22} aria-hidden="true"/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜尋車款、品牌或型號，例如 Ferrari SF" aria-label="智能搜尋車款" autoComplete="off"/><button className={query ? 'search-clear visible' : 'search-clear'} aria-label="清除搜尋" onClick={() => setQuery('')} disabled={!query}><X size={18}/></button></div>{searchMatches.length > 0 && <div className="suggestion-menu" role="listbox" aria-label="搜尋建議">{searchMatches.map((item) => <button role="option" key={item.label} onClick={() => selectSuggestion(item)}><img src={item.image} alt=""/><span>{item.label}</span><ArrowUpRight size={17}/></button>)}</div>}</section>
     <section className="inventory-section" aria-labelledby="inventory-title"><div className="inventory-toolbar"><div><span className="eyeline">現貨車盤</span><h2 id="inventory-title">{selectedBrand ? `${selectedBrand} 精選現貨` : '今日精選現貨'}</h2><p className="result-count" aria-live="polite">共 {inventory.length} 架符合條件的現貨{filterCount ? ` · 已套用 ${filterCount} 個篩選` : ''}</p></div><div className="toolbar-controls"><button className={`filter-button ${filterCount ? 'filter-active' : ''}`} onClick={() => setFilterOpen((open) => !open)} aria-expanded={filterOpen} aria-controls="inventory-filters"><SlidersHorizontal size={17}/>篩選條件{filterCount ? <b>{filterCount}</b> : null}</button><label className="sort-select"><span className="sr-only">排序</span>排序：<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="random">隨機顯示</option><option value="low">價錢：低至高</option><option value="high">價錢：高至低</option><option value="new">上架日期：最新</option><option value="old">上架日期：最舊</option><option value="year">出廠年份</option><option value="mileage">行駛里數</option><option value="owners">車主擁有數</option></select><ChevronDown size={15}/></label><div className="view-mode-toggle" role="group" aria-label="車盤顯示方式"><button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')} aria-pressed={viewMode === 'grid'}><Grid2X2 size={16}/><span>圖片</span></button><button type="button" className={viewMode === 'list' ? 'active' : ''} onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'}><List size={17}/><span>列表</span></button></div></div></div>
       {filterOpen && <div id="inventory-filters" className="filter-panel"><div><span className="filter-label">車種</span><div className="filter-chips">{vehicleTypes.map((type) => <button key={type} className={selectedTypes.includes(type) ? 'selected' : ''} aria-pressed={selectedTypes.includes(type)} onClick={() => toggleType(type)}>{type}</button>)}</div></div><div className="filter-panel-footer"><span>{filterCount ? '選擇更多條件以縮小範圍' : '未選擇額外篩選條件'}</span><button onClick={clearFilters} disabled={!filterCount && !query}>清除全部</button></div></div>}
-      {viewMode === 'grid' ? <div className="inventory-grid">{inventory.map((car) => <article className="vehicle-card" key={car.id}><button className="vehicle-card-main" onClick={() => setActiveCar(car)} aria-label={`查看 ${car.brand} ${car.model} 詳情`}><div className="vehicle-image"><img src={car.image} alt={`${car.brand} ${car.model}`}/><span>{car.type}</span><i>查看詳情 <ArrowUpRight size={15}/></i></div><div className="vehicle-copy"><div className="vehicle-line"><h3>{car.brand} {car.model}</h3><strong>{price(car.price)}</strong></div><p>{car.year} ・ {car.mileage.toLocaleString()} 公里 ・ {car.owners} 手</p><div className="vehicle-highlight">{car.highlight}</div></div></button><button className={`save-button ${saved.includes(car.id) ? 'saved' : ''}`} onClick={() => setSaved((current) => current.includes(car.id) ? current.filter((id) => id !== car.id) : [...current, car.id])} aria-label={saved.includes(car.id) ? `取消收藏 ${car.model}` : `收藏 ${car.model}`} aria-pressed={saved.includes(car.id)}><Heart size={21} fill={saved.includes(car.id) ? 'currentColor' : 'none'}/></button></article>)}</div> : <div className="inventory-list" role="list">{inventory.map((car) => <article className="vehicle-listing" role="listitem" key={car.id}><button className="vehicle-listing-main" onClick={() => setActiveCar(car)} aria-label={`查看 ${car.brand} ${car.model} 詳情`}><img src={car.image} alt={`${car.brand} ${car.model}`}/><div className="vehicle-listing-copy"><div className="vehicle-listing-head"><div><span>{car.type}</span><h3>{car.brand} {car.model}</h3></div><strong>{price(car.price)}</strong></div><div className="listing-specs"><span>{car.year} 年</span><span>{car.mileage.toLocaleString()} 公里</span><span>{car.owners} 手</span></div><p>{car.highlight}</p></div><ArrowUpRight className="listing-arrow" size={18}/></button><button className={`listing-save ${saved.includes(car.id) ? 'saved' : ''}`} onClick={() => setSaved((current) => current.includes(car.id) ? current.filter((id) => id !== car.id) : [...current, car.id])} aria-label={saved.includes(car.id) ? `取消收藏 ${car.model}` : `收藏 ${car.model}`} aria-pressed={saved.includes(car.id)}><Heart size={20} fill={saved.includes(car.id) ? 'currentColor' : 'none'}/></button></article>)}</div>}
+      {inventoryError && <p className="inventory-status" role="status">{inventoryError}<button type="button" onClick={() => void loadInventory()}>重試連線</button></p>}
+      {viewMode === 'grid' ? <div className="inventory-grid">{inventory.map((car) => <article className="vehicle-card" key={car.id}><button className="vehicle-card-main" onClick={() => openVehicle(car)} aria-label={`查看 ${car.brand} ${car.model} 詳情`}><div className="vehicle-image"><img src={car.image} alt={`${car.brand} ${car.model}`}/><span>{car.type}</span><i>查看詳情 <ArrowUpRight size={15}/></i></div><div className="vehicle-copy"><div className="vehicle-line"><h3>{car.brand} {car.model}</h3><strong>{price(car.price)}</strong></div><p>{car.year} ・ {Number(car.mileage || 0).toLocaleString()} 公里 ・ {car.owners} 手</p><div className="vehicle-highlight">{car.highlight}</div></div></button><button className={`save-button ${saved.includes(car.id) ? 'saved' : ''}`} onClick={() => setSaved((current) => current.includes(car.id) ? current.filter((id) => id !== car.id) : [...current, car.id])} aria-label={saved.includes(car.id) ? `取消收藏 ${car.model}` : `收藏 ${car.model}`} aria-pressed={saved.includes(car.id)}><Heart size={21} fill={saved.includes(car.id) ? 'currentColor' : 'none'}/></button></article>)}</div> : <div className="inventory-list" role="list">{inventory.map((car) => <article className="vehicle-listing" role="listitem" key={car.id}><button className="vehicle-listing-main" onClick={() => openVehicle(car)} aria-label={`查看 ${car.brand} ${car.model} 詳情`}><img src={car.image} alt={`${car.brand} ${car.model}`}/><div className="vehicle-listing-copy"><div className="vehicle-listing-head"><div><span>{car.type}</span><h3>{car.brand} {car.model}</h3></div><strong>{price(car.price)}</strong></div><div className="listing-specs"><span>{car.year} 年</span><span>{Number(car.mileage || 0).toLocaleString()} 公里</span><span>{car.owners} 手</span></div><p>{car.highlight}</p></div><ArrowUpRight className="listing-arrow" size={18}/></button><button className={`listing-save ${saved.includes(car.id) ? 'saved' : ''}`} onClick={() => setSaved((current) => current.includes(car.id) ? current.filter((id) => id !== car.id) : [...current, car.id])} aria-label={saved.includes(car.id) ? `取消收藏 ${car.model}` : `收藏 ${car.model}`} aria-pressed={saved.includes(car.id)}><Heart size={20} fill={saved.includes(car.id) ? 'currentColor' : 'none'}/></button></article>)}</div>}
       {inventory.length === 0 && <div className="empty-state"><Search size={28}/><h3>未找到相關車盤</h3><p>可嘗試搜尋品牌、型號，或移除部分篩選條件。</p><button onClick={clearFilters}>顯示所有現貨</button></div>}
     </section>
     <section className="trust-band"><div className="years">30<small>YEARS</small></div><div><h2>汽車業界 30 年經驗</h2><p>合作夥伴及團隊成員曾於香港 Ferrari、Lamborghini、McLaren 及 Porsche 等品牌擔任管理職位，並與品牌香港持有人緊密合作。</p></div><ShieldCheck size={34}/></section>
-  </main><VehicleDetailDialog car={activeCar} onClose={() => setActiveCar(null)} onChat={() => { setActiveCar(null); setChatOpen(true) }}/><ChatWidget open={chatOpen} setOpen={setChatOpen} {...customerChat}/></div>
-}
-
-function VehicleDetailDialog({ car, onClose, onChat }) {
-  if (!car) return null
-  const gallery = car.gallery?.length ? car.gallery : galleryForVehicle(car.image)
-  return <div className="vehicle-dialog-backdrop" role="presentation" onMouseDown={onClose}><section className="vehicle-dialog" role="dialog" aria-modal="true" aria-labelledby="vehicle-dialog-title" onMouseDown={(event) => event.stopPropagation()}><button className="dialog-close" onClick={onClose} aria-label="關閉車輛詳情"><X size={22}/></button><PhotoGallery className="vehicle-gallery" images={gallery} title={`${car.brand} ${car.model} 相片集`} resetKey={car.id}/><div className="dialog-copy"><span className="eyeline">{car.type} · 現貨</span><h2 id="vehicle-dialog-title">{car.brand} {car.model}</h2><strong>{price(car.price)}</strong><p>{car.highlight}</p><dl><div><dt>出廠年份</dt><dd>{car.year}</dd></div><div><dt>行駛里數</dt><dd>{car.mileage.toLocaleString()} 公里</dd></div><div><dt>車主數目</dt><dd>{car.owners} 手</dd></div></dl><button className="dialog-cta" onClick={onChat}><MessageCircle size={17}/>向顧問查詢此車</button></div></section></div>
+  </main><VehicleDetailDialog car={activeCar} onClose={closeVehicle} onChat={() => { closeVehicle(); setChatOpen(true) }}/><ChatWidget open={chatOpen} setOpen={setChatOpen} {...customerChat}/></div>
 }
 
 function ChatWidget({ open, setOpen, messages, message, setMessage, send, status, error }) {
@@ -116,12 +147,16 @@ const requiredSellerPhotos = [
   { key: 'right', label: '車身右側', hint: '右側全車身' },
   { key: 'interior', label: '車內籠', hint: '前排與內籠狀況' },
 ]
+const sellerDraftKey = 'alphamotor-seller-vehicle-draft-v1'
+const sellerDraftFields = ['carName', 'year', 'registrationYear', 'import', 'owners', 'mileage', 'color', 'options', 'history']
 
 function SellerPageRequiredPhotos({ onScreen }) {
   const photoRefs = useRef({})
   const formRef = useRef(null)
   const [photos, setPhotos] = useState({})
-  const [form, setForm] = useState(emptySellerForm)
+  const [form, setForm] = useState(() => {
+    try { return { ...emptySellerForm, ...JSON.parse(localStorage.getItem(sellerDraftKey) || '{}') } } catch { return emptySellerForm }
+  })
   const [touched, setTouched] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -141,6 +176,16 @@ function SellerPageRequiredPhotos({ onScreen }) {
     photos: completePhotos ? '' : '請按指定角度上載全部 5 張相片。',
   }
   const update = (name, value) => setForm((current) => ({ ...current, [name]: value }))
+  useEffect(() => {
+    const draft = Object.fromEntries(sellerDraftFields.map((key) => [key, form[key]]))
+    localStorage.setItem(sellerDraftKey, JSON.stringify(draft))
+  }, [form])
+  const clearDraft = () => {
+    localStorage.removeItem(sellerDraftKey)
+    setForm(emptySellerForm)
+    setTouched({})
+    setSubmitError('已清除本裝置的車輛資料草稿。相片及聯絡資料不會被保存。')
+  }
   const touch = (name) => setTouched((current) => ({ ...current, [name]: true }))
   const setPhoto = (slot, file) => {
     if (!file) return
@@ -188,6 +233,7 @@ function SellerPageRequiredPhotos({ onScreen }) {
         contact_name: form.name.trim(), phone: form.phone.trim(), email: form.email.trim() || null, image_paths: imagePaths, status: 'pending',
       })
       if (error) throw error
+      localStorage.removeItem(sellerDraftKey)
       setSubmitted(true)
     } catch (error) {
       setSubmitError(`提交失敗：${error.message || '請稍後再試。'}`)
@@ -282,6 +328,9 @@ function App() {
   useEffect(() => {
     let active = true
     let restoreVersion = 0
+    const fallbackTimer = window.setTimeout(() => {
+      if (active) setAuthReady(true)
+    }, 5500)
     const restoreAdmin = async (session) => {
       const version = ++restoreVersion
       if (!session?.user) {
@@ -301,7 +350,7 @@ function App() {
     }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { void restoreAdmin(session) })
     void supabase.auth.getSession().then(({ data }) => restoreAdmin(data.session))
-    return () => { active = false; subscription.unsubscribe() }
+    return () => { active = false; window.clearTimeout(fallbackTimer); subscription.unsubscribe() }
   }, [])
   useEffect(() => {
     const userId = admin?.user?.id
@@ -345,7 +394,7 @@ function App() {
       document.removeEventListener('visibilitychange', rescheduleWhenVisible)
     }
   }, [admin?.user?.id, navigate, screen])
-  if (!authReady) return <div className="site-shell" role="status" aria-live="polite"/>
+  if (!authReady) return <div className="site-shell app-loading" role="status" aria-live="polite"><div><span>ALPHA</span><p>正在安全載入車盤…</p></div></div>
   if (screen === 'admin') return admin ? <AdminDashboard onReturnFrontend={() => navigate('buyer')} onSignOut={signOut}/> : <AdminLogin onScreen={navigate} onAuthenticated={completeAdminLogin}/>
   if (screen === 'login') return <AdminLogin onScreen={navigate} onAuthenticated={completeAdminLogin}/>
   return screen === 'seller' ? <SellerPageRequiredPhotos onScreen={navigate}/> : <BuyerHome onScreen={navigate}/>
